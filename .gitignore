@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+.env
+.env.local
+.vercel
+
+# Large one-off data sources, already baked into data/movies.json
+movies_export_from_my_movies_2.xml
+Spis filmów DVD i Blu-ray - Sheet1.csv

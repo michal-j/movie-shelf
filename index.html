@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Movie Shelf</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner center-wrap">
+    <button id="home-btn" class="brand" type="button" title="Reset search and filters">
+      <svg class="brand-mark" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M7 4V20M17 4V20" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M2 9H7M2 15H7M17 9H22M17 15H22" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span>Movie Shelf</span>
+    </button>
+
+    <div class="search-wrap search-wrap-wide">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search-input" type="text" placeholder="Search title, director, actor…" autocomplete="off" />
+    </div>
+
+    <button id="add-movie-btn" class="btn btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Add movie
+    </button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="toolbar-inner center-wrap">
+    <div class="toolbar-left">
+      <label class="control">
+        <span class="control-label">Sort</span>
+        <select id="sort-select">
+          <option value="title-asc">Title (A–Z)</option>
+          <option value="title-desc">Title (Z–A)</option>
+          <option value="year-desc">Year (newest)</option>
+          <option value="year-asc">Year (oldest)</option>
+          <option value="rating-desc">IMDb rating (high–low)</option>
+          <option value="rating-asc">IMDb rating (low–high)</option>
+          <option value="metascore-desc">Metascore (high–low)</option>
+          <option value="metascore-asc">Metascore (low–high)</option>
+          <option value="runtime-desc">Runtime (longest)</option>
+          <option value="runtime-asc">Runtime (shortest)</option>
+          <option value="added-desc">Recently added</option>
+        </select>
+      </label>
+
+      <button id="filter-toggle-btn" class="btn btn-ghost">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6H20M7 12H17M10 18H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Filters
+        <span id="filter-count-badge" class="badge" hidden>0</span>
+      </button>
+
+      <div class="columns-menu-wrap">
+        <button id="columns-toggle-btn" class="btn btn-ghost" hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="16" rx="1.5" stroke="currentColor" stroke-width="1.8"/><path d="M9 4V20M15 4V20" stroke="currentColor" stroke-width="1.8"/></svg>
+          Columns
+        </button>
+        <div id="columns-menu" class="columns-menu" hidden></div>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <span id="movie-counter" class="counter">0 movies</span>
+      <label class="control" id="grid-cols-control" hidden>
+        <span class="control-label">Per row</span>
+        <input type="range" id="grid-cols-slider" min="4" max="8" step="1" />
+        <span id="grid-cols-value" class="control-value">6</span>
+      </label>
+      <div class="view-switch" role="group" aria-label="View mode">
+        <button id="view-grid-btn" class="view-btn active" title="Grid view" aria-label="Grid view">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button id="view-list-btn" class="view-btn" title="List view" aria-label="List view">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<aside id="filter-panel" class="filter-panel" hidden>
+  <div class="filter-panel-inner center-wrap">
+    <div class="filter-panel-header">
+      <h3>Filters</h3>
+      <button id="filter-clear-btn" class="btn-text">Clear all</button>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-group-label">Watched status</span>
+      <div class="chip-row" id="filter-watched">
+        <button class="chip" data-value="all">All</button>
+        <button class="chip" data-value="watched">Watched</button>
+        <button class="chip" data-value="unwatched">Unwatched</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-group-label">Format</span>
+      <div class="chip-row" id="filter-format"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-group-label">Decade</span>
+      <div class="chip-row" id="filter-decade"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-group-label">Genre</span>
+      <div class="chip-row" id="filter-genre"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-group-label">Country</span>
+      <div class="chip-row collapsible" id="filter-country"></div>
+      <button id="filter-country-toggle" class="btn-text chip-toggle-btn" type="button" hidden>Show all</button>
+    </div>
+  </div>
+</aside>
+
+<main id="content">
+  <div id="movie-grid" class="movie-grid"></div>
+  <div id="movie-list" class="movie-list" hidden></div>
+  <div id="empty-state" class="empty-state" hidden>
+    <p>No movies match your filters.</p>
+    <button id="empty-clear-btn" class="btn btn-ghost">Clear filters</button>
+  </div>
+</main>
+
+<!-- Movie detail modal -->
+<div id="detail-modal" class="modal-overlay" hidden>
+  <div class="modal detail-modal">
+    <button class="modal-close" data-close-detail aria-label="Close">×</button>
+    <div id="detail-body" class="detail-body"></div>
+  </div>
+</div>
+
+<!-- Add / edit movie modal -->
+<div id="edit-modal" class="modal-overlay" hidden>
+  <div class="modal edit-modal">
+    <button class="modal-close" data-close-edit aria-label="Close">×</button>
+    <h2 id="edit-modal-title">Add movie</h2>
+    <form id="edit-form">
+      <div class="form-grid">
+        <label class="field field-wide">
+          <span>Title *</span>
+          <input type="text" name="title" required />
+        </label>
+        <label class="field field-wide">
+          <span>Original title</span>
+          <input type="text" name="originalTitle" />
+        </label>
+        <label class="field">
+          <span>Year</span>
+          <input type="number" name="year" min="1888" max="2100" />
+        </label>
+        <label class="field">
+          <span>Runtime (min)</span>
+          <input type="number" name="runtimeMinutes" min="1" />
+        </label>
+        <label class="field">
+          <span>IMDb rating</span>
+          <input type="number" name="imdbRating" min="0" max="10" step="0.1" />
+        </label>
+        <label class="field">
+          <span>Format</span>
+          <select name="format">
+            <option value="DVD">DVD</option>
+            <option value="Blu-ray">Blu-ray</option>
+            <option value="4K Ultra HD">4K Ultra HD</option>
+            <option value="Digital">Digital</option>
+          </select>
+        </label>
+        <label class="field field-wide">
+          <span>Genres (comma separated)</span>
+          <input type="text" name="genres" placeholder="Drama, Thriller" />
+        </label>
+        <label class="field field-wide">
+          <span>Director(s) (comma separated)</span>
+          <input type="text" name="director" />
+        </label>
+        <label class="field field-wide">
+          <span>Cast (comma separated)</span>
+          <input type="text" name="cast" placeholder="Actor One, Actor Two" />
+        </label>
+        <label class="field field-wide">
+          <span>IMDb ID (e.g. tt0053125)</span>
+          <input type="text" name="imdbId" placeholder="tt…" />
+        </label>
+        <label class="field field-wide">
+          <span>Description</span>
+          <textarea name="description" rows="3"></textarea>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="button" id="delete-movie-btn" class="btn btn-danger" hidden>Delete</button>
+        <div class="form-actions-right">
+          <button type="button" class="btn btn-ghost" data-close-edit>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

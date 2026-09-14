@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "movie-shelf",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/michaljaciubek/Documents/Projects/movie-shelf/scripts/serve.py"],
+      "port": 4173
+    }
+  ]
+}
