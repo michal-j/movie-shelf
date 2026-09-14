@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign in — Movie Shelf</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .login-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+  }
+  .login-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 24px;
+    color: var(--text);
+  }
+  .login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .login-field span { font-size: 13px; color: var(--text-dim); }
+  .login-field input {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .login-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .login-error {
+    color: var(--accent);
+    font-size: 13px;
+    margin-bottom: 12px;
+    min-height: 18px;
+  }
+  .login-submit {
+    width: 100%;
+    margin-top: 4px;
+  }
+  .login-demo-link {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .login-demo-link a { color: var(--accent); text-decoration: none; }
+  .login-demo-link a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M7 4V20M17 4V20" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M2 9H7M2 15H7M17 9H22M17 15H22" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span>Movie Shelf</span>
+    </div>
+    <form id="login-form">
+      <label class="login-field">
+        <span>Email</span>
+        <input type="email" name="email" autocomplete="username" required />
+      </label>
+      <label class="login-field">
+        <span>Password</span>
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <p id="login-error" class="login-error"></p>
+      <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+    </form>
+    <p class="login-demo-link"><a href="demo.html">Or try the public demo →</a></p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" integrity="sha384-iLddHTLokph6Omwoyid4XKxHaWa6w41BnoEj0q5oOrzmYPpHIKt1wyjReA7s//pP" crossorigin="anonymous"></script>
+<script src="supabaseClient.js"></script>
+<script src="login.js"></script>
+</body>
+</html>

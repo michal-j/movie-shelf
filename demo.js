@@ -2,46 +2,14 @@
   "use strict";
 
   const STORAGE_KEYS = {
+    watched: "movieShelf.watched",
+    customMovies: "movieShelf.customMovies",
+    deletedIds: "movieShelf.deletedIds",
+    overrides: "movieShelf.overrides",
     viewMode: "movieShelf.viewMode",
     listColumns: "movieShelf.listColumns",
     gridCols: "movieShelf.gridCols",
   };
-
-  // Movie rows live in Supabase with snake_case columns; the rest of this file
-  // works with the same camelCase shape the old static JSON used, so the
-  // select aliases columns back to camelCase and writes go through this map.
-  const SELECT_COLUMNS = [
-    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "title",
-    "originalTitle:original_title", "originalLanguage:original_language", "year",
-    "imdbRating:imdb_rating", "imdbVotes:imdb_votes", "metascore", "runtimeMinutes:runtime_minutes",
-    "genres", "countries", "director", "writers", "cast:cast_members", "studios",
-    "format", "edition", "aspectRatio:aspect_ratio", "audioLanguages:audio_languages",
-    "subtitleLanguages:subtitle_languages", "hasExtras:has_extras", "description",
-    "posterUrl:poster_url", "backdropUrl:backdrop_url", "dateAdded:date_added",
-    "collectionNumber:collection_number", "copies", "watched",
-  ].join(", ");
-
-  const CAMEL_TO_DB_COLUMN = {
-    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", title: "title",
-    originalTitle: "original_title", originalLanguage: "original_language", year: "year",
-    imdbRating: "imdb_rating", imdbVotes: "imdb_votes", metascore: "metascore",
-    runtimeMinutes: "runtime_minutes", genres: "genres", countries: "countries",
-    director: "director", writers: "writers", cast: "cast_members", studios: "studios",
-    format: "format", edition: "edition", aspectRatio: "aspect_ratio",
-    audioLanguages: "audio_languages", subtitleLanguages: "subtitle_languages",
-    hasExtras: "has_extras", description: "description", posterUrl: "poster_url",
-    backdropUrl: "backdrop_url", dateAdded: "date_added", collectionNumber: "collection_number",
-    copies: "copies", watched: "watched",
-  };
-
-  function toDbColumns(movieLikeObject) {
-    const out = {};
-    for (const [key, value] of Object.entries(movieLikeObject)) {
-      const column = CAMEL_TO_DB_COLUMN[key];
-      if (column) out[column] = value;
-    }
-    return out;
-  }
 
   const GRID_COLS_MIN = 4;
   const GRID_COLS_MAX = 8;
@@ -76,8 +44,12 @@
   }
 
   const state = {
-    allMovies: [], // every row from Supabase, source of truth
-    movies: [], // filtered+sorted view
+    baseMovies: [],
+    movies: [], // merged, filtered+sorted view
+    watched: loadJSON(STORAGE_KEYS.watched, {}),
+    customMovies: loadJSON(STORAGE_KEYS.customMovies, []),
+    deletedIds: new Set(loadJSON(STORAGE_KEYS.deletedIds, [])),
+    overrides: loadJSON(STORAGE_KEYS.overrides, {}),
     viewMode: localStorage.getItem(STORAGE_KEYS.viewMode) || "grid",
     gridCols: (() => {
       const saved = parseInt(localStorage.getItem(STORAGE_KEYS.gridCols), 10);
@@ -127,40 +99,25 @@
 
   // ---------- Data loading ----------
   async function init() {
-    const { data: { session } } = await window.supabaseClient.auth.getSession();
-    if (!session) {
-      window.location.href = "login.html";
-      return;
-    }
-
-    const { data, error } = await window.supabaseClient
-      .from("movies")
-      .select(SELECT_COLUMNS)
-      .order("title");
-    if (error) {
-      console.error(error);
-      document.body.innerHTML = `<p style="padding:40px;color:#eceef2;font-family:sans-serif;">Failed to load your collection. Please refresh.</p>`;
-      return;
-    }
-    state.allMovies = data;
+    const res = await fetch("data/movies-demo.json");
+    state.baseMovies = await res.json();
 
     buildFilterChips();
     bindEvents();
     applyGridCols();
     setViewMode(state.viewMode, { skipSave: true });
     render();
-
-    window.supabaseClient.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") window.location.href = "login.html";
-    });
   }
 
   function allMovies() {
-    return state.allMovies;
+    const overriddenBase = state.baseMovies
+      .filter((m) => !state.deletedIds.has(m.id))
+      .map((m) => (state.overrides[m.id] ? { ...m, ...state.overrides[m.id] } : m));
+    return [...overriddenBase, ...state.customMovies];
   }
 
   function isWatched(id) {
-    return !!getMovieById(id)?.watched;
+    return !!state.watched[id];
   }
 
   // ---------- Filter chip construction ----------
@@ -605,21 +562,12 @@
     });
   }
 
-  async function toggleWatched(id) {
-    const movie = getMovieById(id);
-    if (!movie) return;
-    const nextWatched = !movie.watched;
-    movie.watched = nextWatched; // optimistic
+  function toggleWatched(id) {
+    state.watched[id] = !state.watched[id];
+    if (!state.watched[id]) delete state.watched[id];
+    saveJSON(STORAGE_KEYS.watched, state.watched);
     render();
     if (detailModalOpenId === id) renderDetailBody(getMovieById(id));
-
-    const { error } = await window.supabaseClient.from("movies").update({ watched: nextWatched }).eq("id", id);
-    if (error) {
-      movie.watched = !nextWatched; // revert
-      render();
-      if (detailModalOpenId === id) renderDetailBody(getMovieById(id));
-      showToast("Failed to update watched status");
-    }
   }
 
   function getMovieById(id) {
@@ -786,7 +734,7 @@
       .filter(Boolean);
   }
 
-  editForm.addEventListener("submit", async (e) => {
+  editForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const fd = new FormData(editForm);
     const patch = {
@@ -804,22 +752,16 @@
       description: fd.get("description").trim(),
     };
 
-    const submitBtn = editForm.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-
     if (state.editingId) {
-      const { error } = await window.supabaseClient
-        .from("movies")
-        .update(toDbColumns(patch))
-        .eq("id", state.editingId);
-      submitBtn.disabled = false;
-      if (error) {
-        console.error(error);
-        showToast("Failed to update movie");
-        return;
+      const isCustom = state.customMovies.some((m) => m.id === state.editingId);
+      if (isCustom) {
+        const idx = state.customMovies.findIndex((m) => m.id === state.editingId);
+        state.customMovies[idx] = { ...state.customMovies[idx], ...patch };
+      } else {
+        state.overrides[state.editingId] = { ...state.overrides[state.editingId], ...patch };
+        saveJSON(STORAGE_KEYS.overrides, state.overrides);
       }
-      const idx = state.allMovies.findIndex((m) => m.id === state.editingId);
-      state.allMovies[idx] = { ...state.allMovies[idx], ...patch };
+      saveJSON(STORAGE_KEYS.customMovies, state.customMovies);
       showToast("Movie updated");
     } else {
       const newMovie = {
@@ -834,7 +776,6 @@
         dateAdded: new Date().toISOString(),
         posterUrl: null,
         backdropUrl: null,
-        watched: false,
         copies: [
           {
             format: patch.format,
@@ -851,14 +792,8 @@
           },
         ],
       };
-      const { error } = await window.supabaseClient.from("movies").insert(toDbColumns(newMovie));
-      submitBtn.disabled = false;
-      if (error) {
-        console.error(error);
-        showToast("Failed to add movie");
-        return;
-      }
-      state.allMovies.push(newMovie);
+      state.customMovies.push(newMovie);
+      saveJSON(STORAGE_KEYS.customMovies, state.customMovies);
       showToast("Movie added");
     }
     closeEditModal();
@@ -866,17 +801,17 @@
     render();
   });
 
-  deleteMovieBtn.addEventListener("click", async () => {
+  deleteMovieBtn.addEventListener("click", () => {
     if (!state.editingId) return;
     if (!confirm("Remove this movie from your shelf?")) return;
-
-    const { error } = await window.supabaseClient.from("movies").delete().eq("id", state.editingId);
-    if (error) {
-      console.error(error);
-      showToast("Failed to remove movie");
-      return;
+    const isCustom = state.customMovies.some((m) => m.id === state.editingId);
+    if (isCustom) {
+      state.customMovies = state.customMovies.filter((m) => m.id !== state.editingId);
+      saveJSON(STORAGE_KEYS.customMovies, state.customMovies);
+    } else {
+      state.deletedIds.add(state.editingId);
+      saveJSON(STORAGE_KEYS.deletedIds, [...state.deletedIds]);
     }
-    state.allMovies = state.allMovies.filter((m) => m.id !== state.editingId);
     showToast("Movie removed");
     closeEditModal();
     buildFilterChips();
@@ -989,10 +924,6 @@
 
     el("add-movie-btn").addEventListener("click", () => openEditModal(null));
     el("home-btn").addEventListener("click", goHome);
-    el("sign-out-btn").addEventListener("click", async () => {
-      await window.supabaseClient.auth.signOut();
-      window.location.href = "login.html";
-    });
 
     document.querySelectorAll("[data-close-detail]").forEach((b) => b.addEventListener("click", closeDetailModal));
     document.querySelectorAll("[data-close-edit]").forEach((b) => b.addEventListener("click", closeEditModal));
