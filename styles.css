@@ -727,6 +727,17 @@ main#content { padding: 20px; }
 .movie-preview-original { font-size: 12.5px; color: var(--text-faint); font-style: italic; margin: 0 0 8px; }
 .movie-preview-subline { font-size: 12.5px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .movie-preview-subline span:not(.pill):not(:last-child)::after { content: "·"; margin-left: 6px; color: var(--text-faint); }
+.duplicate-notice {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+.duplicate-notice strong { color: var(--accent); }
 .movie-preview-overview { font-size: 12.5px; line-height: 1.5; color: var(--text-dim); margin: 0 0 8px; }
 .movie-preview-meta { font-size: 12px; color: var(--text-faint); line-height: 1.6; }
 .movie-preview-meta strong { color: var(--text-dim); font-weight: 600; }

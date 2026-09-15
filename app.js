@@ -752,6 +752,7 @@
 
   let searchDebounceTimer = null;
   let selectedMovie = null; // full merged TMDB+OMDb record for the movie about to be added
+  let duplicateOfExisting = null; // set when selectedMovie's imdbId matches a movie already on the shelf
 
   function openEditModal(id) {
     state.editingId = id || null;
@@ -791,6 +792,7 @@
 
   function resetAddPanel() {
     selectedMovie = null;
+    duplicateOfExisting = null;
     clearTimeout(searchDebounceTimer);
     el("search-query").value = "";
     el("search-results").hidden = true;
@@ -799,6 +801,7 @@
     el("movie-preview").innerHTML = "";
     el("add-format-select").value = "DVD";
     el("confirm-add-btn").disabled = true;
+    el("confirm-add-btn").textContent = "Add to shelf";
     setSearchStatus("");
   }
 
@@ -868,11 +871,23 @@
     }
   }
 
+  function ownedFormatsList(movie) {
+    const formats = (movie.copies && movie.copies.length ? movie.copies.map((c) => c.format) : [movie.format]).filter(Boolean);
+    return [...new Set(formats)].join(", ");
+  }
+
+  function updateConfirmButtonLabel() {
+    const btn = el("confirm-add-btn");
+    btn.textContent = duplicateOfExisting ? `Add ${el("add-format-select").value} copy` : "Add to shelf";
+  }
+
   function applySelectedMovie(data) {
     selectedMovie = data;
+    duplicateOfExisting = data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
     renderMoviePreview(data);
     setSearchStatus("");
     el("confirm-add-btn").disabled = false;
+    updateConfirmButtonLabel();
   }
 
   function renderMoviePreview(data) {
@@ -889,6 +904,7 @@
           ${data.metascore != null ? `<span class="pill metascore-pill ${metascoreClass(data.metascore)}">${data.metascore} Metascore</span>` : ""}
           ${data.imdbRating != null ? `<span class="pill gold">★ ${data.imdbRating.toFixed(1)} IMDb</span>` : ""}
         </div>
+        ${duplicateOfExisting ? `<p class="duplicate-notice">You already own this — <strong>${escapeHtml(ownedFormatsList(duplicateOfExisting))}</strong>. Saving will add another copy, not a new entry.</p>` : ""}
         ${data.description ? `<p class="movie-preview-overview">${escapeHtml(data.description)}</p>` : ""}
         <div class="movie-preview-meta">
           ${(data.genres || []).length ? `<div><strong>Genres:</strong> ${escapeHtml(data.genres.join(", "))}</div>` : ""}
@@ -900,9 +916,11 @@
     `;
     el("search-again-btn").addEventListener("click", () => {
       selectedMovie = null;
+      duplicateOfExisting = null;
       preview.hidden = true;
       preview.innerHTML = "";
       el("confirm-add-btn").disabled = true;
+      updateConfirmButtonLabel();
       el("search-query").value = "";
       el("search-query").focus();
     });
@@ -952,12 +970,50 @@
     searchDebounceTimer = setTimeout(() => runTitleSearch(query), 350);
   });
 
+  el("add-format-select").addEventListener("change", updateConfirmButtonLabel);
+
   el("confirm-add-btn").addEventListener("click", async () => {
     if (!selectedMovie) return;
     const btn = el("confirm-add-btn");
     btn.disabled = true;
-    btn.textContent = "Adding…";
     const format = el("add-format-select").value;
+
+    if (duplicateOfExisting) {
+      btn.textContent = "Adding…";
+      const newCopy = {
+        format,
+        formatDetail: null,
+        edition: null,
+        distributor: null,
+        aspectRatio: null,
+        audioLanguages: [],
+        subtitleLanguages: [],
+        extras: null,
+        polishLicensedRelease: null,
+        notes: null,
+        source: "manual",
+      };
+      const updatedCopies = [...(duplicateOfExisting.copies || []), newCopy];
+      const { error } = await window.supabaseClient
+        .from("movies")
+        .update({ copies: updatedCopies })
+        .eq("id", duplicateOfExisting.id);
+      btn.disabled = false;
+      if (error) {
+        console.error(error);
+        showToast("Failed to add copy");
+        return;
+      }
+      const idx = state.allMovies.findIndex((m) => m.id === duplicateOfExisting.id);
+      state.allMovies[idx] = { ...state.allMovies[idx], copies: updatedCopies };
+      showToast(`Added ${format} copy of "${duplicateOfExisting.title}"`);
+      closeEditModal();
+      buildFilterChips();
+      render();
+      return;
+    }
+
+    btn.textContent = "Adding…";
 
     const newMovie = {
       id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
