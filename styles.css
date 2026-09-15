@@ -134,6 +134,7 @@ img { max-width: 100%; }
 .btn-ghost.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 .btn-danger { background: transparent; border-color: #7a2b36; color: #f2879a; }
 .btn-danger:hover { background: #3a1620; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 .btn-text {
   background: none; border: none; color: var(--text-dim); font-size: 13px;
   cursor: pointer; text-decoration: underline; padding: 0;
