@@ -73,6 +73,7 @@
       decades: new Set(),
       genres: new Set(),
       countries: new Set(),
+      multiCopy: false,
     },
     editingId: null, // id currently open in edit modal (null = adding new)
   };
@@ -248,6 +249,9 @@
     if (state.filters.formats.size) {
       list = list.filter((m) => state.filters.formats.has(m.format));
     }
+    if (state.filters.multiCopy) {
+      list = list.filter((m) => (m.copies || []).length > 1);
+    }
     if (state.filters.genres.size) {
       list = list.filter((m) => (m.genres || []).some((g) => state.filters.genres.has(g)));
     }
@@ -324,7 +328,8 @@
       state.filters.formats.size +
       state.filters.genres.size +
       state.filters.countries.size +
-      state.filters.decades.size;
+      state.filters.decades.size +
+      (state.filters.multiCopy ? 1 : 0);
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
   }
@@ -919,6 +924,14 @@
       });
     });
 
+    document.querySelectorAll("#filter-copies .chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        state.filters.multiCopy = !state.filters.multiCopy;
+        chip.classList.toggle("active", state.filters.multiCopy);
+        render();
+      });
+    });
+
     el("filter-clear-btn").addEventListener("click", clearFilters);
     el("empty-clear-btn").addEventListener("click", clearFilters);
 
@@ -947,6 +960,7 @@
     state.filters.genres.clear();
     state.filters.countries.clear();
     state.filters.decades.clear();
+    state.filters.multiCopy = false;
     document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.value === "all"));
     render();
   }
