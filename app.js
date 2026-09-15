@@ -684,9 +684,9 @@
     const watched = isWatched(movie.id);
     const backdrop = movie.backdropUrl || movie.posterUrl;
     detailBody.innerHTML = `
-      <div class="detail-hero" style="${backdrop ? `background-image:url('${backdrop}')` : `background:${gradientFor(movie.title)}`}"></div>
+      <div class="detail-hero" style="${backdrop ? `background-image:url('${escapeHtml(backdrop)}')` : `background:${gradientFor(movie.title)}`}"></div>
       <div class="detail-main">
-        <div class="detail-poster">${movie.posterUrl ? `<img src="${movie.posterUrl}" alt="">` : `<div class="poster-fallback" style="height:100%;background:${gradientFor(movie.title)}">${escapeHtml(movie.title)}</div>`}</div>
+        <div class="detail-poster">${movie.posterUrl ? `<img src="${escapeHtml(movie.posterUrl)}" alt="">` : `<div class="poster-fallback" style="height:100%;background:${gradientFor(movie.title)}">${escapeHtml(movie.title)}</div>`}</div>
         <div class="detail-info">
           <h2 class="detail-title">${escapeHtml(movie.title)}</h2>
           ${movie.originalTitle && movie.originalTitle !== movie.title ? `<p class="detail-original">${escapeHtml(movie.originalTitle)}</p>` : ""}
@@ -702,7 +702,7 @@
             <button class="btn ${watched ? "btn-watched" : "btn-ghost"}" id="detail-watch-btn" type="button">
               ${eyeIconSvg()} ${watched ? "Watched" : "Mark as watched"}
             </button>
-            ${movie.imdbLink ? `<a class="btn btn-ghost" href="${movie.imdbLink}" target="_blank" rel="noopener">IMDb ↗</a>` : ""}
+            ${movie.imdbLink ? `<a class="btn btn-ghost" href="${escapeHtml(movie.imdbLink)}" target="_blank" rel="noopener">IMDb ↗</a>` : ""}
             <a class="btn btn-ghost" href="https://www.youtube.com/results?search_query=${encodeURIComponent((movie.originalTitle || movie.title) + " " + (movie.year || "") + " trailer")}" target="_blank" rel="noopener">Trailer ↗</a>
             <button class="btn btn-ghost" id="detail-edit-btn" type="button">${pencilIconSvg()} Edit</button>
           </div>
