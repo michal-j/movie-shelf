@@ -749,13 +749,18 @@
   const editModalTitle = el("edit-modal-title");
   const deleteMovieBtn = el("delete-movie-btn");
 
+  let lookupExtra = null; // fields the form has no input for: posterUrl, backdropUrl, tmdbId, etc.
+
   function openEditModal(id) {
     state.editingId = id || null;
     editForm.reset();
+    lookupExtra = null;
+    setLookupStatus("");
     if (id) {
       const movie = getMovieById(id);
       editModalTitle.textContent = "Edit movie";
       deleteMovieBtn.hidden = false;
+      el("lookup-row").hidden = true;
       editForm.title.value = movie.title || "";
       editForm.originalTitle.value = movie.originalTitle || "";
       editForm.year.value = movie.year || "";
@@ -770,6 +775,8 @@
     } else {
       editModalTitle.textContent = "Add movie";
       deleteMovieBtn.hidden = true;
+      el("lookup-row").hidden = false;
+      el("lookup-query").value = "";
     }
     editModal.hidden = false;
   }
@@ -777,7 +784,65 @@
   function closeEditModal() {
     editModal.hidden = true;
     state.editingId = null;
+    lookupExtra = null;
   }
+
+  function setLookupStatus(msg, isError) {
+    const el2 = el("lookup-status");
+    el2.hidden = !msg;
+    el2.textContent = msg;
+    el2.classList.toggle("error", !!isError);
+  }
+
+  function applyLookupResult(data) {
+    editForm.title.value = data.title || "";
+    editForm.originalTitle.value = data.originalTitle || "";
+    editForm.year.value = data.year || "";
+    editForm.runtimeMinutes.value = data.runtimeMinutes || "";
+    editForm.imdbRating.value = data.imdbRating ?? "";
+    editForm.genres.value = (data.genres || []).join(", ");
+    editForm.director.value = (data.director || []).join(", ");
+    editForm.cast.value = (data.cast || []).map((c) => c.name).join(", ");
+    editForm.imdbId.value = data.imdbId || "";
+    editForm.description.value = data.description || "";
+    lookupExtra = {
+      posterUrl: data.posterUrl,
+      backdropUrl: data.backdropUrl,
+      tmdbId: data.tmdbId,
+      imdbVotes: data.imdbVotes,
+      metascore: data.metascore,
+      countries: data.countries || [],
+      originalLanguage: data.originalLanguage,
+      studios: data.studios || [],
+      cast: data.cast || [],
+    };
+  }
+
+  el("lookup-btn").addEventListener("click", async () => {
+    const query = el("lookup-query").value.trim();
+    if (!query) return;
+    const btn = el("lookup-btn");
+    btn.disabled = true;
+    btn.textContent = "Looking up…";
+    setLookupStatus("");
+    try {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const isImdbId = /^tt\d+$/i.test(query);
+      const qs = isImdbId ? `imdbId=${encodeURIComponent(query)}` : `title=${encodeURIComponent(query)}`;
+      const res = await fetch(`/api/movie-lookup?${qs}`, {
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Lookup failed");
+      applyLookupResult(data);
+      setLookupStatus(`Found "${data.title}" (${data.year || "?"}) — review the fields below, then save.`);
+    } catch (err) {
+      setLookupStatus(err.message || "Lookup failed", true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Look up";
+    }
+  });
 
   function splitCsv(value) {
     return value
@@ -825,15 +890,21 @@
       const newMovie = {
         id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         ...patch,
-        studios: [],
+        cast: lookupExtra?.cast?.length ? lookupExtra.cast : patch.cast,
+        studios: lookupExtra?.studios || [],
         edition: "",
         aspectRatio: "",
         audioLanguages: [],
         subtitleLanguages: [],
         hasExtras: false,
         dateAdded: new Date().toISOString(),
-        posterUrl: null,
-        backdropUrl: null,
+        posterUrl: lookupExtra?.posterUrl || null,
+        backdropUrl: lookupExtra?.backdropUrl || null,
+        tmdbId: lookupExtra?.tmdbId || null,
+        imdbVotes: lookupExtra?.imdbVotes ?? null,
+        metascore: lookupExtra?.metascore ?? null,
+        countries: lookupExtra?.countries || [],
+        originalLanguage: lookupExtra?.originalLanguage || null,
         watched: false,
         copies: [
           {

@@ -648,6 +648,20 @@ main#content { padding: 20px; }
 /* Edit modal */
 .edit-modal { max-width: 640px; padding: 26px 28px 22px; }
 .edit-modal h2 { margin: 0 0 16px; font-size: 18px; }
+.lookup-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.lookup-row input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+}
+.lookup-row input:focus { border-color: var(--accent); }
+.lookup-status { font-size: 12.5px; color: var(--text-dim); margin: 0 0 16px; }
+.lookup-status.error { color: var(--accent); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--text-dim); }
 .field-wide { grid-column: 1 / -1; }
