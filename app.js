@@ -1,10 +1,17 @@
 (() => {
   "use strict";
 
+  // Shared by both the real (Supabase-backed) app and the public demo.
+  // demo.html sets window.MOVIE_SHELF_DEMO = true before this script loads,
+  // and never loads supabaseClient.js / the Supabase SDK at all — so every
+  // Supabase call in this file must be behind a `!DEMO_MODE` branch.
+  const DEMO_MODE = !!window.MOVIE_SHELF_DEMO;
+
   const STORAGE_KEYS = {
     viewMode: "movieShelf.viewMode",
     listColumns: "movieShelf.listColumns",
     gridCols: "movieShelf.gridCols",
+    demoMovies: "movieShelf.demoMovies",
   };
 
   // Movie rows live in Supabase with snake_case columns; the rest of this file
@@ -128,22 +135,32 @@
 
   // ---------- Data loading ----------
   async function init() {
-    const { data: { session } } = await window.supabaseClient.auth.getSession();
-    if (!session) {
-      window.location.href = "login.html";
-      return;
-    }
+    if (DEMO_MODE) {
+      const saved = loadJSON(STORAGE_KEYS.demoMovies, null);
+      if (saved) {
+        state.allMovies = saved;
+      } else {
+        const res = await fetch("data/movies-demo.json");
+        state.allMovies = await res.json();
+      }
+    } else {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) {
+        window.location.href = "login.html";
+        return;
+      }
 
-    const { data, error } = await window.supabaseClient
-      .from("movies")
-      .select(SELECT_COLUMNS)
-      .order("title");
-    if (error) {
-      console.error(error);
-      document.body.innerHTML = `<p style="padding:40px;color:#eceef2;font-family:sans-serif;">Failed to load your collection. Please refresh.</p>`;
-      return;
+      const { data, error } = await window.supabaseClient
+        .from("movies")
+        .select(SELECT_COLUMNS)
+        .order("title");
+      if (error) {
+        console.error(error);
+        document.body.innerHTML = `<p style="padding:40px;color:#eceef2;font-family:sans-serif;">Failed to load your collection. Please refresh.</p>`;
+        return;
+      }
+      state.allMovies = data;
     }
-    state.allMovies = data;
 
     buildFilterChips();
     bindEvents();
@@ -151,9 +168,17 @@
     setViewMode(state.viewMode, { skipSave: true });
     render();
 
-    window.supabaseClient.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") window.location.href = "login.html";
-    });
+    if (!DEMO_MODE) {
+      window.supabaseClient.auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_OUT") window.location.href = "login.html";
+      });
+    }
+  }
+
+  // Demo's only "backend" is localStorage — call after any mutation to
+  // state.allMovies so a refresh doesn't lose it. No-op in the real app.
+  function saveDemoMovies() {
+    if (DEMO_MODE) saveJSON(STORAGE_KEYS.demoMovies, state.allMovies);
   }
 
   function allMovies() {
@@ -617,6 +642,11 @@
     movie.watched = nextWatched; // optimistic
     render();
     if (detailModalOpenId === id) renderDetailBody(getMovieById(id));
+
+    if (DEMO_MODE) {
+      saveDemoMovies();
+      return;
+    }
 
     const { error } = await window.supabaseClient.from("movies").update({ watched: nextWatched }).eq("id", id);
     if (error) {
@@ -1110,6 +1140,19 @@
 
     const submitBtn = editForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
+
+    if (DEMO_MODE) {
+      const idx = state.allMovies.findIndex((m) => m.id === state.editingId);
+      state.allMovies[idx] = { ...state.allMovies[idx], ...patch };
+      saveDemoMovies();
+      submitBtn.disabled = false;
+      showToast("Movie updated");
+      closeEditModal();
+      buildFilterChips();
+      render();
+      return;
+    }
+
     const { error } = await window.supabaseClient
       .from("movies")
       .update(toDbColumns(patch))
@@ -1131,6 +1174,16 @@
   deleteMovieBtn.addEventListener("click", async () => {
     if (!state.editingId) return;
     if (!confirm("Remove this movie from your shelf?")) return;
+
+    if (DEMO_MODE) {
+      state.allMovies = state.allMovies.filter((m) => m.id !== state.editingId);
+      saveDemoMovies();
+      showToast("Movie removed");
+      closeEditModal();
+      buildFilterChips();
+      render();
+      return;
+    }
 
     const { error } = await window.supabaseClient.from("movies").delete().eq("id", state.editingId);
     if (error) {
@@ -1257,12 +1310,21 @@
     el("filter-clear-btn").addEventListener("click", clearFilters);
     el("empty-clear-btn").addEventListener("click", clearFilters);
 
-    el("add-movie-btn").addEventListener("click", () => openEditModal(null));
+    if (DEMO_MODE) {
+      const addBtn = el("add-movie-btn");
+      addBtn.disabled = true;
+      addBtn.title = "Not available in the demo — sign in to add movies";
+    } else {
+      el("add-movie-btn").addEventListener("click", () => openEditModal(null));
+    }
     el("home-btn").addEventListener("click", goHome);
-    el("sign-out-btn").addEventListener("click", async () => {
-      await window.supabaseClient.auth.signOut();
-      window.location.href = "login.html";
-    });
+    const signOutBtn = el("sign-out-btn");
+    if (signOutBtn) {
+      signOutBtn.addEventListener("click", async () => {
+        await window.supabaseClient.auth.signOut();
+        window.location.href = "login.html";
+      });
+    }
 
     document.querySelectorAll("[data-close-detail]").forEach((b) => b.addEventListener("click", closeDetailModal));
     document.querySelectorAll("[data-close-edit]").forEach((b) => b.addEventListener("click", closeEditModal));
