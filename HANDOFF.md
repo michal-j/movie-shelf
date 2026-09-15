@@ -1,330 +1,311 @@
-# Movie Shelf — Handoff: Prototype → Live App
+# Movie Shelf — Handoff (current state, 2026-09-15)
 
-This document exists to brief a **fresh Claude Code session** that has no memory
-of the conversation that built this prototype. Read this whole file before
-touching code. The prototype (vanilla HTML/CSS/JS, local-only) is functionally
-complete and polished; the task now is turning it into a deployed, database-backed
-real app while reusing as much of the existing frontend as possible.
+This replaces the original migration-planning HANDOFF.md — that migration is
+done. This doc describes the app **as it actually is right now**, for a fresh
+Claude Code session with no memory of how it got here. Read this whole file
+before touching code.
 
-The user's own words, verbatim, on the eventual UI polish philosophy: they want a
-sleek, modern, uncluttered app — every feature added so far was driven by
-concrete feedback (screenshots with red arrows pointing at bugs, "this looks
-busy", "make it consistent with X"), so match that bar, don't regress it.
+The user's own words on UI polish, still true: they want a sleek, modern,
+uncluttered app. Every feature was driven by concrete feedback (screenshots,
+"this looks busy", "make it consistent with X") — match that bar.
 
 ---
 
-## 1. What exists today
+## 1. What this app is
 
-A static prototype, no build step, no backend, no framework:
+A personal movie/disc collection tracker: 557 movies (as of this writing),
+each with metadata (cast, ratings, genres, etc.) and one or more owned
+physical/digital **copies** (a DVD and a Blu-ray of the same film are one
+movie row with `copies.length === 2`, not two rows). Single owner, real
+auth, deployed and live.
 
-```
-index.html          — single page, all markup (header, toolbar, filter panel, grid/list, two modals)
-app.js               — ~1000 lines vanilla JS, IIFE, no imports/bundler
-styles.css           — hand-written CSS, dark theme, CSS custom properties for theming
-favicon.svg          — filmstrip icon matching the header logo
-data/movies.json     — 545 movies, the entire dataset (see §3 for shape)
-watched_status.md    — real watched-status export from the user's own browser's
-                       localStorage, 423 entries, pre-validated against
-                       data/movies.json (see §8). Migration input, not app code.
-scripts/*.py         — one-off data-pipeline scripts used to BUILD data/movies.json (see §4).
-                       Not part of the running app. Keep for reference / re-runs, but they
-                       are not meant to ship or run in production.
-.claude/launch.json  — local dev server config (see §5 for why it's non-standard)
-```
+**Live URLs:**
+- Real app (owner-only, Supabase-backed): `https://movie-shelf-six.vercel.app`
+- Public demo (client-side only, no login): `https://movie-shelf-six.vercel.app/demo.html`
+- A second, orphaned Vercel project (`movie-shelf-jcbk1.vercel.app`) exists
+  from an early manual-deploy mistake, is gated by Vercel's own login, and
+  is dead weight — harmless to ignore, the user couldn't find a delete
+  option in the dashboard.
 
-Run locally: `python3 scripts/serve.py` → http://localhost:4173
-(A plain `python3 -m http.server` also works, but `serve.py` adds
-`Cache-Control: no-store` — without it, browsers aggressively cache `app.js`
-and you'll edit code and see nothing change. This does NOT matter once deployed
-behind Vercel, which sets its own correct caching, but keep it for local dev.)
-
-**There is no git repo yet.** `.DS_Store` exists and should be gitignored.
-`movies_export_from_my_movies_2.xml` (11MB) and the `.csv` source file are the
-original data sources used to build `data/movies.json` — they're not needed by
-the running app and probably shouldn't be committed (or commit them but exclude
-from the Vercel build).
-
-### All state currently lives in `localStorage`, client-side only
-
-```
-movieShelf.watched        { [movieId]: true }              — which movies are watched
-movieShelf.customMovies   [ movie, ... ]                     — movies added via "Add movie"
-movieShelf.deletedIds     [ movieId, ... ]                    — base movies the user deleted
-movieShelf.overrides      { [movieId]: partialMoviePatch }    — edits to base movies
-movieShelf.viewMode       "grid" | "list"
-movieShelf.listColumns    { visible: {...}, widths: {...} }
-movieShelf.gridCols       4-8 (grid columns per row)
-```
-
-`app.js`'s `allMovies()` merges `data/movies.json` + overrides + customMovies
-- deletedIds on every render. **This four-way-merge complexity exists ONLY
-because the base dataset is a static file that can't be edited in place.**
-Once there's a real database, this whole layer should collapse to one
-`movies` table you read/write directly — see §7, this is a real simplification
-opportunity, not just a nice-to-have.
+**Repo:** `github.com/michal-j/movie-shelf` (public). Git-connected to
+Vercel — every push to `main` auto-deploys to production.
 
 ---
 
-## 2. Feature inventory (so you don't have to re-derive scope)
+## 2. Architecture
 
-- **Grid view**: poster cards, adjustable columns-per-row (4–8, slider, persisted),
-  cards capped at 180px so they don't stretch huge — extra space becomes
-  side margins, not bigger posters. Hover reveals title/year/runtime/format-or-copy-count/genre
-  and a Metascore+IMDb rating badge pair (moved off the poster face on request —
-  it looked "busy"; now hover-only).
-- **List view**: sortable-feeling table with **user-resizable, show/hide-able
-  columns** (Title/Poster/Watched are locked; Original Title, Genre, Year,
-  Runtime, IMDb Rating, Metascore, Format, Director are toggleable via a
-  "Columns" menu). Column widths + visibility persist. Sticky header (this
-  required giving `.movie-list` its own bounded scroll pane — `position:sticky`
-  breaks under any ancestor with non-`visible` overflow, a real bug fixed
-  mid-project). Resize-handle borders are always faintly visible, not
-  hover-only, so users discover they're draggable.
-- **Sort**: title, year, rating, Metascore, runtime, date added. Title sort
-  strips leading articles ("The", "A", "Der", "Le", "El", "Il", etc., plus
-  French/Italian elisions like `L'Auberge`) so "Das Boot" sorts under B, not D.
-- **Search**: word-boundary matching (not raw substring) across title,
-  original title, director, cast. Raw substring made "ace" match every movie
-  with a "Spacey"/"Wallace" in the cast — fixed to `\bquery` regex matching.
-- **Filters**: watched status, format, decade, genre, country — multi-select
-  chips, AND across categories, OR within a category. Country filter
-  collapses to 4 rows (matches Genre's height) with a "Show all" toggle,
-  since there are 40+ countries.
-- **Detail view**: a **right-side sliding drawer** (not a centered modal — this
-  was an explicit redesign), shows poster, title + original title, year/runtime/
-  format-or-copies/Metascore/IMDb rating pills, genres, country, overview, cast
-  (with character names), director/writers, and a **"Your copies" section** —
-  one card per physically-owned copy (format, edition, distributor, aspect
-  ratio, audio/subtitle languages, extras, Polish-license flag, notes).
-- **Multi-copy support**: a movie can have 2+ owned physical copies (e.g. a
-  DVD and a Blu-ray of the same film). `movie.copies` is an array; the UI
-  shows "N copies owned" / "N× copies" instead of a single format wherever
-  that would otherwise duplicate info — this took a couple of bug-fix rounds,
-  see the array-of-copies note in §3.
-- **Watched status**: an eye icon. Blue when watched. **Indicator-only** in
-  grid/list (not clickable there — this was explicitly requested after
-  initially making it clickable everywhere); the only way to toggle it is the
-  "Mark as watched" button inside the detail drawer.
-- **Add/Edit/Delete movie**: a form modal (stays centered, unlike the detail
-  drawer — deliberately not converted). Currently fully manual-entry. **The
-  user wants this replaced with a real TMDB/OMDb title-or-IMDb-ID lookup that
-  auto-fills everything, keeping only format/edition/per-copy fields as manual
-  input — explicitly deferred, not built yet. Do this after the DB migration.**
-- **Home button**: the "Movie Shelf" logo/wordmark is a button that resets
-  search + all filters (not a page navigation).
-- **Ratings**: IMDb rating (gold pill/star) and **Metascore** (green/yellow/red,
-  solid-fill on grid cards for contrast against bright posters; outline-style
-  pill in the drawer to match the IMDb pill's weight). Sortable by both.
-- **Responsive**: centered `max-width: 1180px` content column (topbar, toolbar,
-  filter panel) on wide screens instead of full-bleed edge-to-edge; toolbar
-  wraps to two rows below ~900px instead of overflowing.
-- **Favicon**: matches the header brand mark.
-
-## 3. Data model (`data/movies.json`, one JSON array, 545 objects)
-
-Top-level fields present across the dataset:
+Vanilla HTML/CSS/JS, **no build step, no framework, no bundler.** Deployed
+to Vercel as a static site plus a couple of serverless functions under
+`/api`.
 
 ```
-id, imdbId, imdbLink, tmdbId, title, originalTitle, originalLanguage, year,
-imdbRating, imdbVotes, metascore, runtimeMinutes, genres[], countries[],
-director[], writers[], cast[{name, role}], studios[], format, edition,
-aspectRatio, audioLanguages[], subtitleLanguages[], hasExtras, description,
-posterUrl, backdropUrl, dateAdded, collectionNumber, copies[]
+index.html          — real app shell (loads supabaseClient.js + app.js)
+demo.html            — public demo shell (loads app.js directly, sets a
+                        window flag before it loads, no Supabase scripts)
+login.html / login.js — email/password sign-in page for the real app
+app.js               — SHARED by both index.html and demo.html (~1300 lines).
+                        Branches on DEMO_MODE (window.MOVIE_SHELF_DEMO,
+                        set by demo.html). This is the most important
+                        architectural fact in this file — see §3.
+supabaseClient.js    — creates window.supabaseClient (URL + publishable
+                        anon key, both safe to be public — RLS does the
+                        real access control, see §5)
+styles.css           — one shared stylesheet for everything, dark theme
+favicon.svg
+api/movie-search.js  — Vercel serverless fn: TMDB-only live title search
+api/movie-lookup.js  — Vercel serverless fn: full TMDB+OMDb merge for one
+                        movie, by imdbId / tmdbId / title+year
+data/movies.json     — historical full export, NOT used by the running
+                        app anymore (kept for reference / re-running the
+                        pipeline scripts). 545 rows, frozen.
+data/movies-demo.json — static 32-movie curated subset for the public demo.
+                        Frozen snapshot, NOT connected to Supabase in any
+                        way — see §3 for why this can go stale.
+scripts/*.py         — one-off data-pipeline scripts that originally built
+                        data/movies.json from the user's My Movies XML +
+                        CSV exports. Not part of the running app. Useful
+                        as reference if the pipeline needs re-running.
+.claude/launch.json  — local dev server config (see §7 for a sandbox gotcha)
 ```
 
-`copies[]` — one entry per physically owned disc/edition:
+**Run locally:** `python3 scripts/serve.py` → `http://localhost:4173`
+(sets `Cache-Control: no-store` so edits show up immediately; a plain
+`python3 -m http.server` also works but will cache `app.js` aggressively).
+
+---
+
+## 3. The single most important thing: `app.js` is shared
+
+`demo.js` **does not exist** — it was deleted. Both `index.html` (real app)
+and `demo.html` (public demo) load the exact same `app.js`. It reads
+`window.MOVIE_SHELF_DEMO` (set to `true` by an inline `<script>` in
+demo.html, right before app.js loads) into a `DEMO_MODE` constant near the
+top of the file, and branches on it in exactly these places — nowhere else:
+
+- **`init()`**: real mode checks a Supabase session (redirects to
+  `login.html` if none) and queries the `movies` table; demo mode loads
+  `data/movies-demo.json` once, or a previously-saved localStorage blob
+  (`movieShelf.demoMovies`) if one exists from a prior visit.
+- **Every write** (`toggleWatched`, edit-form submit, delete): real mode
+  does a Supabase call; demo mode mutates `state.allMovies` directly and
+  calls `saveDemoMovies()`, which just writes the whole array back to that
+  one localStorage key. That's the entirety of demo's "backend" — no
+  base/override/custom/deleted merge complexity, unlike the original
+  prototype this app started from.
+- **Add-movie button**: real mode wires a click handler that opens the
+  add flow. Demo mode does NOT attach a click handler at all, and instead
+  adds a `.btn-inert` CSS class + `title` tooltip + `aria-disabled="true"`.
+  Deliberately **not** the native `disabled` attribute — disabled buttons
+  don't fire hover/title tooltips in most browsers, which is a real bug we
+  hit and fixed (see `.btn-inert` in styles.css for the explanation).
+- **Sign-out button**: guarded by `el("sign-out-btn")` existing at all —
+  demo.html simply doesn't have that button in its markup, no DEMO_MODE
+  check needed there.
+
+**Why this matters for you:** any change to rendering, filtering, sorting,
+the detail drawer, the edit-existing-movie form, toasts, or styling
+automatically applies to both the real app and the demo, because it's
+the same code. You should almost never need to touch demo.html except for
+its header/banner markup — don't reintroduce a second JS file.
+
+**The one thing that can't be unified:** the Add-movie *search/lookup* flow
+(§4) calls `/api/movie-search` and `/api/movie-lookup`, both of which
+require a real Supabase session (checked server-side) so the OMDb quota
+can't be hit by anonymous traffic. That's why demo's Add-movie is disabled
+outright rather than getting a parallel manual-entry implementation — it
+was a deliberate simplification the user explicitly asked for, not a
+missing feature.
+
+**Known limitation of this design:** `data/movies-demo.json` is a frozen
+snapshot, generated once, with zero connection to Supabase (by design — the
+demo makes zero backend calls, full stop). If you edit a movie's copies in
+the real app, the demo will keep showing the old snapshot forever unless
+someone manually regenerates that JSON file from current Supabase data.
+The user knows this and said it's not important to fix.
+
+---
+
+## 4. Feature inventory
+
+Everything from the original prototype (grid/list view, sort, word-boundary
+search, filters, the sliding detail drawer, multi-copy support, watched
+toggle) is unchanged in behavior — see git history before commit `5041321`
+if you need the deep rationale for any of those. What's been added/changed
+since the Supabase migration:
+
+- **Data layer**: Supabase Postgres (`movies` table, JSONB for array
+  fields) instead of a static JSON file + localStorage. See §5.
+- **Auth**: single owner account, Supabase email/password. Real app
+  redirects to `login.html` if no session.
+- **Add-movie flow** (real app only): type a title → live search-as-you-
+  type against TMDB (debounced ~350ms, up to 5 results with poster/year) →
+  click one (or paste an IMDb ID directly, which skips straight to a
+  single result) → a **read-only preview** loads (full TMDB+OMDb merge:
+  poster, ratings, overview, cast, director — styled like the detail
+  drawer) → pick a format from a dropdown (the only manual field) → "Add
+  to shelf". No more manual title/year/genre typing for new movies.
+- **Duplicate-copy detection**: if the selected movie's IMDb ID already
+  matches something on the shelf, the preview shows "You already own
+  this — DVD, Blu-ray" and the confirm button relabels to "Add Digital
+  copy" (or whichever format is picked) — confirming appends to the
+  *existing* row's `copies[]` instead of creating a duplicate movie. This
+  was added reactively after a real duplicate ("The Abyss") slipped
+  through before the feature existed; that specific duplicate was merged
+  by hand via SQL, this feature prevents new ones.
+- **"Multiple copies" filter**: a single boolean toggle chip in the filter
+  panel (not a multi-option group — it's binary, so it didn't need one).
+  Sits in the filter panel's second row (after Decade, before Genre) —
+  putting it in the first row overflows the page's 1180px content column
+  once the real (not demo's shortened) decade/format lists are accounted
+  for. See the git commit "Fix filter panel bloat..." if you need to move
+  filter groups around again — retest against real data at realistic
+  widths, not the demo's shorter lists at an arbitrarily wide viewport.
+- **Edit-existing-movie**: still the original manual form (title, year,
+  genres, director, cast, description as comma-separated text fields,
+  IMDb ID, format). Explicitly not reworked yet — see §6.
+
+---
+
+## 5. Data model & backend
+
+**Supabase project:** `movie-shelf` (id `ybfxyrzkdexjjptuzzuy`), org JCBK,
+region eu-west-1, free tier. One table, `public.movies`:
+
+```sql
+id text primary key,   -- e.g. "csv-12-angry-men-1957" (legacy imports) or
+                        -- "custom-<random>" (added via the app)
+imdb_id, imdb_link, title, original_title, original_language, format,
+edition, aspect_ratio text,
+tmdb_id, year, imdb_votes, metascore, runtime_minutes, collection_number integer,
+imdb_rating numeric,
+genres, countries, director, writers, cast_members, studios,
+audio_languages, subtitle_languages, copies jsonb (not null default '[]'),
+has_extras, watched boolean,
+description text,
+poster_url, backdrop_url text,
+date_added timestamptz,
+created_at, updated_at timestamptz
+```
+
+`copies` shape (one entry per owned disc/edition):
 ```json
 {
-  "format": "DVD",
-  "formatDetail": "DVD-9",
-  "edition": "książkowe",
-  "distributor": "Warner Bros",
-  "aspectRatio": "2.20:1",
-  "audioLanguages": ["eng", "spa"],
-  "subtitleLanguages": ["eng", "pol", "multi"],
-  "extras": "zwiastun",
-  "polishLicensedRelease": false,
-  "notes": null,
-  "source": "csv"
+  "format": "DVD", "formatDetail": "DVD-9", "edition": "...",
+  "distributor": "...", "aspectRatio": "...",
+  "audioLanguages": [...], "subtitleLanguages": [...],
+  "extras": "...", "polishLicensedRelease": false, "notes": null,
+  "source": "csv" | "my-movies+csv" | "manual"
 }
 ```
-Top-level `format` is a derived "best format across copies" convenience value
-used by the simple filter chips — it is NOT authoritative when `copies.length > 1`;
-the UI already knows to prefer `copies` for display in that case.
+Top-level `format`/etc. are a convenience "best copy" snapshot — NOT
+authoritative once `copies.length > 1`; the UI already knows to read
+`copies` in that case.
 
-**Known data gaps to carry over, not bugs to "fix" during migration:**
-- 88 of 545 movies are missing `countries` — OMDb's free-tier daily quota
-  (1,000 req/day) was exhausted mid-backfill. Trivial script re-run once the
-  quota resets (`scripts/enrich_omdb.py`, already supports incremental re-runs).
-- "Mortal Kombat: Conquest" and "Mortal Kombat: Final Battle" have thin/no
-  cast and no `tmdbId` — they're Polish DVD releases of TV content with no
-  real movie-database entry. User explicitly said to leave them as-is.
+**RLS:** enabled, one policy, scoped to the specific owner's `auth.uid()`
+(a hardcoded UUID in the policy, checked via `auth.uid() = '<uuid>'`) — NOT
+"any authenticated user". This was a deliberate hardening: the original
+policy trusted any authenticated user, which would only have been safe as
+long as Supabase self-serve signup stayed off; scoping to the exact UID
+makes it correct regardless of that toggle. If you ever need the owner's
+UID again: `select id from auth.users;` (there's exactly one row).
 
-## 4. Data pipeline scripts (`scripts/`, Python, not part of the running app)
+**`app.js`'s `SELECT_COLUMNS`/`CAMEL_TO_DB_COLUMN`** maps snake_case DB
+columns to the camelCase shape the rest of the file (and originally the
+static JSON prototype) uses — e.g. `cast:cast_members` in the select alias.
+If you add a DB column, it needs an entry in both places to round-trip.
 
-Run in roughly this historical order; useful as reference for what data came
-from where and how to re-run/extend later (e.g. once the countries backfill
-quota resets):
+**Current data state:** 557 movies, 424 watched. 2 movies (Mortal Kombat:
+Conquest / Final Battle) intentionally have no IMDb/TMDB entry — Polish DVD
+releases of TV content, user said leave as-is, don't "fix" this. ~47 movies
+have no Metascore — legitimately absent on OMDb for those titles, not a
+data gap. Everything else was backfilled from OMDb already.
 
-- `parse_movies.py` — original My Movies XML export → `data/movies.json`
-- `fetch_posters.py` — early poster-only TMDB pass (superseded by fetch_cast.py/enrich_tmdb.py)
-- `merge_csv.py` — merges a second CSV collection export in, handles multi-copy
-  detection, dedupes by IMDb ID (with a documented King-Kong-1933-vs-2005 gotcha
-  around blind title matching — read the comments if extending this)
-- `fix_titles.py` — makes TMDB's English title authoritative, drops Polish
-  titles, flags "title happens to equal original title in a non-English
-  language" cases (e.g. genuinely "Das Boot")
-- `enrich_tmdb.py` — TMDB as source of truth for year/runtime/poster/rating
-- `enrich_omdb.py` — OMDb (i.e. real IMDb data) as source of truth for rating/
-  runtime/genre/country/plot/director/writers, subject to the 1000/day quota
-- `fetch_cast.py` — TMDB full credits (with character names) for every movie,
-  including a TV-credits-endpoint special case for "Band of Brothers" (it's a
-  TV series on TMDB, not a movie — `/tv/{id}/credits`, not `/movie/{id}/credits`)
-- `serve.py` — local dev server, see §1
+---
 
-All of these expect `TMDB_API_KEY` / `OMDB_API_KEY` env vars. **These keys were
-pasted into chat during the prototype session and used for one-off local
-script runs — they are NOT currently embedded in any shipped file.** For the
-live app, get fresh keys and store them as Vercel environment variables; do
-not commit them.
+## 6. Known deferred work / backlog (explicitly "later, not now")
 
-## 5. A sandbox gotcha you will probably hit again
+In roughly the order the user raised them:
 
-`preview_start` (the harness's dev-server launcher) fails in this environment
-with `PermissionError` / `getcwd: cannot access parent directories` no matter
-what — it's a sandboxing quirk of this specific machine/session, not a bug in
-any script. The workaround that worked: launch the server as a **plain
-background Bash command** (`python3 scripts/serve.py &` or similar via the
-Bash tool's `run_in_background`), then use the browser tools' `navigate`
-against `http://localhost:4173` directly instead of `preview_start`. If this
-still applies in the new session, don't burn time debugging `preview_start`
-itself — just use that workaround again immediately.
+1. **Filter panel grid alignment**: the panel uses flex-wrap, so groups
+   don't line up into clean columns on wide screens (ragged, not a strict
+   grid). A real fix likely means switching to CSS grid with fixed column
+   tracks. Not started.
+2. **Click-outside-to-close the filter panel**: currently only the
+   "Filters" toggle button opens/closes it. The modals already close on
+   backdrop click + Escape; the filter panel has neither. Not started.
+3. **Broader toast coverage**: toasts exist for add/edit/delete-movie and
+   the duplicate-copy flow, but not everything — e.g. toggling watched
+   status shows no success toast (only a failure one), clearing filters
+   shows none. Needs the user to pin down exactly which actions should get
+   one before building. Not started.
+4. **Reworking the Edit-existing-movie flow**: still the old manual form.
+   The user wants to conceptualize a proper add/edit UI for per-copy
+   format data (edition, distributor, aspect ratio, etc. — currently only
+   settable by the original CSV import, not through the app UI at all) and
+   said explicitly to defer touching Edit until that's designed. Don't
+   redesign Edit without that conversation happening first.
+5. **`data/movies-demo.json` going stale** (§3) — known, not important per
+   the user, no action needed unless asked.
 
-## 6. Decisions made for the live version (confirmed with the user)
+---
 
-- **Hosting: Vercel**, free `*.vercel.app` subdomain, no custom domain for now.
-- **Backend/DB: Supabase.** Both Vercel and Supabase already have MCP tool
-  connectors available in this environment — use them directly rather than
-  the CLIs where possible.
-- **Frontend stays vanilla HTML/CSS/JS.** No framework rewrite. Swap the data
-  layer only: `fetch('data/movies.json')` → Supabase client query;
-  `localStorage` writes for watched/add/edit/delete → Supabase writes.
-- **Two access modes, confirmed by the user:**
-  1. **Authenticated owner mode** — just one real user (the collection owner).
-     Full CRUD against the real Supabase-backed collection.
-  2. **Public demo mode** — shared for demonstration purposes, no login.
-     Shows mock data or a curated subset of the real collection. **Recommended
-     approach (not yet confirmed in detail with the user, revisit in the new
-     session): keep demo mode 100% client-side, exactly like today's
-     prototype** — bundle a static JSON subset (e.g. 40–80 movies) and let all
-     interactions (watched toggle, add/edit/delete) stay in `localStorage`,
-     with zero Supabase calls. This reuses the entire existing app almost
-     unchanged for the demo, and completely avoids the harder problem of
-     public/anonymous writes to a shared backend. Only the authenticated
-     owner route talks to Supabase. Confirm this plan with the user before
-     building it — it's a strong recommendation, not a locked decision.
-  - Since it's genuinely single-user for the real data, **you probably don't
-    need a per-user rows/multi-tenant schema at all** — one `movies` table,
-    RLS-gated so only the authenticated owner can read/write it, is enough.
-    Don't over-build multi-tenancy for a one-person app.
-- **"Add movie" real lookup (TMDB/OMDb by title or IMDb ID): wanted, but
-  explicitly deferred** — do it after the DB migration is live, not before.
-  When you do build it: needs a small Vercel serverless function to proxy the
-  TMDB/OMDb calls (API keys can't live in client-side JS), auto-fills
-  everything the app already tracks except the `copies[]`/format/edition
-  fields, which the user wants to keep entering manually per physical copy.
+## 7. Environment / secrets / deployment gotchas
 
-## 7. Suggested punch list for the new session
+- **Vercel env vars**: `TMDB_API_KEY` and `OMDB_API_KEY`, set for all
+  environments in the Vercel dashboard (Project Settings → Environment
+  Variables). Required by both `/api` functions. **Gotcha we hit for
+  real**: adding/changing an env var does NOT retroactively apply to an
+  already-built deployment — a *preview* deployment built before the var
+  was added will keep failing with "Server is missing TMDB_API_KEY" until
+  you trigger a genuinely fresh build for that branch (the Vercel
+  dashboard has a "redeploy" option that specifically rebuilds with
+  current env vars — that's what fixed it last time, an empty commit also
+  works). If a preview seems to be missing a key that's definitely set on
+  the project, this is almost certainly why.
+- **Supabase anon/publishable key** in `supabaseClient.js` is meant to be
+  public — RLS is the actual security boundary, not key secrecy.
+- **`preview_start` (the harness's dev-server launcher) fails in this
+  sandbox** with a `PermissionError`/`getcwd` error, unrelated to any app
+  code. Workaround: launch `python3 scripts/serve.py` as a plain background
+  Bash command, then use the browser tools' `navigate` against
+  `http://localhost:4173` directly.
+- **git push works directly from this sandbox** via the user's existing
+  `osxkeychain` credential helper — no need to hand pushes back to the
+  user unless something's actually broken.
+- **Branching**: the user knows git branches but hasn't used them in years
+  and likes using them to validate riskier changes via Vercel's automatic
+  per-branch preview deployments before merging to `main` (which
+  auto-deploys to production). For small, easily-verified changes, direct
+  commits to `main` are fine and is what's mostly happened — use judgment
+  on which a given change warrants, same as any other risk call.
 
-Roughly in order; not gospel, just a sane starting sequence:
+---
 
-1. `git init`, sensible `.gitignore` (`.DS_Store`, maybe the huge source
-   XML/CSV), first commit.
-2. Design the Supabase schema. Recommendation: don't fully normalize —
-   `movies` table with JSONB columns for `genres`, `director`, `writers`,
-   `cast`, `studios`, `countries`, `audioLanguages`, `subtitleLanguages`,
-   `copies` (nearly 1:1 with the current JSON shape, fast to migrate, still
-   queryable via Postgres JSONB/GIN indexes if you need filter performance
-   later). Add a plain `watched boolean` column directly on `movies` — no
-   separate per-user state table needed, see the single-user note above.
-3. Import all 545 rows from `data/movies.json` into Supabase, then apply
-   `watched_status.md` (423 pre-validated entries) to set the `watched` column.
-4. Add Supabase Auth (single owner account — decide email/password vs magic
-   link with the user), gate the real app route.
-5. Swap the frontend's data layer: `init()`'s fetch → Supabase query;
-   `toggleWatched`/edit-form-submit/delete → Supabase writes. This is also
-   the moment to delete the base/custom/override/deletedIds merge complexity
-   in `allMovies()` — with a real table, every movie is just a row.
-6. Build `/demo` (public, static subset + localStorage, per the plan in §6 —
-   confirm details with the user first).
-7. Deploy to Vercel, verify the `*.vercel.app` URL end to end.
-8. (Later, not blocking launch) Build the TMDB/OMDb "Add movie" lookup flow
-   per §6.
-9. (Later) Re-run `scripts/enrich_omdb.py` once the OMDb quota resets to
-   backfill the remaining 88 movies' `countries`.
+## 8. Things learned the hard way this session (read before repeating them)
 
-## 8. Follow-up clarifications (asked after the first draft of this doc)
-
-**Where does watched status live, and how do we migrate it?**
-Confirmed: only in `localStorage["movieShelf.watched"]`, never in
-`data/movies.json`. It's scoped per-browser/per-origin — the Claude Browser
-pane instance used throughout the prototyping session had essentially nothing
-meaningful in it (one leftover test toggle), but the user's own regular
-browser did have real data.
-
-**The user has already exported it to `watched_status.md`** at the project
-root — it's the raw `localStorage["movieShelf.watched"]` JSON blob (a single
-line, `{ "<movieId>": true, ... }`), obtained via their browser's devtools
-console. Already validated in this session: **423 entries, valid JSON, all
-423 IDs match current `data/movies.json` ids with zero stale/orphaned
-entries.** It's ready to use as-is for the Supabase migration — once the
-`movies` table exists and is seeded (same ids), loop over this file and set
-`watched = true` for each key. No further cleaning needed.
-
-**Should movie metadata (cast, plot, rating, etc.) refresh periodically from
-TMDB/OMDb once it's in Supabase?**
-Recommendation, not yet built: no automatic polling. Supabase is the
-canonical read source (avoids external-API latency/cost on every page load).
-Add a manual **"Refresh from TMDB/OMDb"** action in the edit drawer that
-re-fetches one movie on demand — cast/plot/poster essentially never change
-post-release, and rating drift is slow, so on-demand is enough for a personal
-collection. A scheduled bulk re-sync (Vercel Cron) is a reasonable *later*
-addition if it turns out to matter, not a launch requirement. A refresh must
-only ever touch TMDB/OMDb-sourced fields — never `copies[]`, format, watched
-status, or notes, which the APIs have no knowledge of.
-
-**Is there a GitHub connector available for automating the repo?**
-Checked directly in this session: `gh` CLI is **not installed** on this
-machine (`which gh` → not found), so no CLI-based GitHub automation is
-available yet. A GitHub App/plugin connector exists in this environment but
-is **not authorized** — that requires the user to approve it via their
-claude.ai connector settings; it can't be done from a non-interactive Claude
-Code session. Plain `git` (2.50.1) *is* installed, so local repo init and
-commits can happen immediately with zero external dependency.
-**Important: GitHub is not required to deploy.** The Vercel connector already
-available in this environment can deploy directly from a local folder with no
-git remote at all. Recommendation: deploy via Vercel directly first; treat a
-GitHub remote as optional later infrastructure (mainly useful for auto-deploy-
-on-push and backup) to set up only if/when the user wants that workflow.
-
-## 9. Design/interaction conventions to preserve
-
-These came from repeated, specific user feedback during the prototype build —
-don't regress them by accident during the migration:
-
-- Cards/pills favor **solid, high-contrast fills** over low-opacity tinted
-  backgrounds when sitting on top of unpredictable poster art (grid Metascore
-  badge); use the **subtle bordered-pill** style when sitting on a flat panel
-  background (drawer pills) — these are deliberately different treatments for
-  the same data, not an inconsistency.
-- Separator dots (`·`) between inline metadata items must never render
-  *inside* a pill's own box — only apply the `::after` dot to plain text
-  siblings, never to `.pill` elements.
-- When a movie has multiple copies, never show a redundant single "format"
-  alongside the "N copies" indicator — the copies indicator *replaces* format
-  in that slot, in the same position format would otherwise occupy, for both
-  the grid hover overlay and the drawer subline.
-- Any time you add something that could grow into a filter option (genre,
-  format, country, etc.) via add/edit/delete, the filter chip lists must
-  rebuild live — this was a real bug (chips only built once at startup from
-  the static base dataset).
+- **Supabase bulk SQL via the MCP `execute_sql` tool**: batch generated SQL
+  to roughly 12–20 rows / under ~30KB per call when rows contain long text
+  fields — both the Read tool (25000-token cap) and Bash (~85KB output cap)
+  truncate larger single reads, which will silently corrupt a batch if you
+  don't notice.
+- **`COALESCE` on a `jsonb not null default '[]'` column never fires** —
+  such a column is never actually SQL `NULL`, it's an empty array, and
+  `COALESCE(col, fallback)` only substitutes on true `NULL`. A "fill only
+  if missing" backfill against such a column needs
+  `case when col = '[]'::jsonb then fallback else col end` instead. This
+  silently no-opped an entire backfill batch before it was caught — always
+  spot-check one row after a "fill gaps" batch before trusting it worked.
+- **Delegating small tasks to a background Agent can cost more time than
+  doing them directly** — worked great for the original 545-row Supabase
+  import (genuinely large, mechanical, worth keeping out of the main
+  context), but a 10-file Vercel deploy delegated the same way hit repeated
+  session rate-limit interruptions and silently dropped files on its first
+  attempt. Reserve delegation for jobs large enough that inlining the data
+  would meaningfully bloat context; do small, easily-verified things
+  directly.
+- **Test layout/width changes against the real constrained width and real
+  full data, not a wide viewport and the demo's shortened dataset** — both
+  mistakes independently hid the same filter-panel overflow bug, since
+  both made the row look roomier than it actually is on the real app.
+  The page's content column is capped at `--content-max: 1180px`
+  regardless of browser window width.
