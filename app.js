@@ -12,6 +12,7 @@
     listColumns: "movieShelf.listColumns",
     gridCols: "movieShelf.gridCols",
     demoMovies: "movieShelf.demoMovies",
+    activeView: "movieShelf.activeView",
   };
 
   // Movie rows live in Supabase with snake_case columns; the rest of this file
@@ -45,6 +46,38 @@
     const out = {};
     for (const [key, value] of Object.entries(movieLikeObject)) {
       const column = CAMEL_TO_DB_COLUMN[key];
+      if (column) out[column] = value;
+    }
+    return out;
+  }
+
+  // Watchlist rows share most of movies' shape but have no copies/format/watched,
+  // plus cached TMDB/JustWatch streaming-availability columns of their own.
+  const SELECT_COLUMNS_WATCHLIST = [
+    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "title",
+    "originalTitle:original_title", "originalLanguage:original_language", "year",
+    "imdbRating:imdb_rating", "imdbVotes:imdb_votes", "metascore", "runtimeMinutes:runtime_minutes",
+    "genres", "countries", "director", "writers", "cast:cast_members", "studios",
+    "description", "posterUrl:poster_url", "backdropUrl:backdrop_url",
+    "streamingProviders:streaming_pl", "streamingLink:streaming_link",
+    "streamingFetchedAt:streaming_fetched_at", "dateAdded:date_added",
+  ].join(", ");
+
+  const CAMEL_TO_DB_COLUMN_WATCHLIST = {
+    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", title: "title",
+    originalTitle: "original_title", originalLanguage: "original_language", year: "year",
+    imdbRating: "imdb_rating", imdbVotes: "imdb_votes", metascore: "metascore",
+    runtimeMinutes: "runtime_minutes", genres: "genres", countries: "countries",
+    director: "director", writers: "writers", cast: "cast_members", studios: "studios",
+    description: "description", posterUrl: "poster_url", backdropUrl: "backdrop_url",
+    streamingProviders: "streaming_pl", streamingLink: "streaming_link",
+    streamingFetchedAt: "streaming_fetched_at", dateAdded: "date_added",
+  };
+
+  function toDbColumnsWatchlist(itemLikeObject) {
+    const out = {};
+    for (const [key, value] of Object.entries(itemLikeObject)) {
+      const column = CAMEL_TO_DB_COLUMN_WATCHLIST[key];
       if (column) out[column] = value;
     }
     return out;
@@ -85,6 +118,11 @@
   const state = {
     allMovies: [], // every row from Supabase, source of truth
     movies: [], // filtered+sorted view
+    allWatchlist: [], // every row from the watchlist table
+    watchlist: [], // filtered+sorted watchlist view
+    // Demo has no watchlist tab/DOM at all — ignore any "watchlist" value a
+    // real-app visit on the same origin may have left in localStorage.
+    activeView: DEMO_MODE ? "collection" : localStorage.getItem(STORAGE_KEYS.activeView) || "collection",
     viewMode: localStorage.getItem(STORAGE_KEYS.viewMode) || "grid",
     gridCols: (() => {
       const saved = parseInt(localStorage.getItem(STORAGE_KEYS.gridCols), 10);
@@ -110,6 +148,13 @@
       countries: new Set(),
       multiCopy: false,
     },
+    watchlistFilters: {
+      decades: new Set(),
+      genres: new Set(),
+      countries: new Set(),
+      streamingAvailable: "all", // all | yes | no
+      streamingServices: new Set(),
+    },
     editingId: null, // id currently open in edit modal (null = adding new)
   };
 
@@ -132,6 +177,10 @@
   const counterEl = el("movie-counter");
   const filterPanel = el("filter-panel");
   const filterCountBadge = el("filter-count-badge");
+  // Watchlist DOM is only present in index.html — these are null in the demo.
+  const watchlistGrid = el("watchlist-grid");
+  const watchlistList = el("watchlist-list");
+  const watchlistEmptyState = el("watchlist-empty-state");
 
   // ---------- Data loading ----------
   async function init() {
@@ -160,18 +209,34 @@
         return;
       }
       state.allMovies = data;
+
+      const { data: watchlistData, error: watchlistError } = await window.supabaseClient
+        .from("watchlist")
+        .select(SELECT_COLUMNS_WATCHLIST)
+        .order("date_added", { ascending: false });
+      if (watchlistError) {
+        console.error(watchlistError);
+      } else {
+        state.allWatchlist = watchlistData;
+      }
     }
 
     buildFilterChips();
+    if (!DEMO_MODE) buildWatchlistFilterChips();
     bindEvents();
     applyGridCols();
     setViewMode(state.viewMode, { skipSave: true });
-    render();
+    if (DEMO_MODE) {
+      render();
+    } else {
+      switchView(state.activeView, { skipSave: true });
+    }
 
     if (!DEMO_MODE) {
       window.supabaseClient.auth.onAuthStateChange((event) => {
         if (event === "SIGNED_OUT") window.location.href = "login.html";
       });
+      refreshStaleStreamingProviders();
     }
   }
 
@@ -183,6 +248,10 @@
 
   function allMovies() {
     return state.allMovies;
+  }
+
+  function allWatchlist() {
+    return state.allWatchlist;
   }
 
   function isWatched(id) {
@@ -211,6 +280,43 @@
     );
 
     if (!filterPanel.hidden) setupCollapsibleChipRow("filter-country", "filter-country-toggle");
+  }
+
+  // Decade/Genre/Country chip-row containers are shared with the collection
+  // filter panel (same DOM ids, different value sets) — whichever build
+  // function ran most recently "owns" their current contents, so switchView()
+  // always calls the one matching the tab being switched to.
+  function buildWatchlistFilterChips() {
+    const items = allWatchlist();
+    const genres = uniqueSorted(items.flatMap((m) => m.genres || []));
+    const countries = uniqueSorted(items.flatMap((m) => m.countries || []));
+    const decades = uniqueSorted(
+      items.filter((m) => m.year).map((m) => Math.floor(m.year / 10) * 10)
+    ).sort((a, b) => b - a);
+    const services = uniqueSorted(items.flatMap((m) => (m.streamingProviders || []).map((p) => p.name)));
+
+    renderChipGroup("filter-genre", genres, state.watchlistFilters.genres);
+    renderChipGroup("filter-country", countries, state.watchlistFilters.countries);
+    renderChipGroup(
+      "filter-decade",
+      decades.map((d) => `${d}s`),
+      state.watchlistFilters.decades
+    );
+    renderChipGroup("filter-streaming-service", services, state.watchlistFilters.streamingServices);
+
+    if (!filterPanel.hidden) {
+      setupCollapsibleChipRow("filter-country", "filter-country-toggle");
+      setupCollapsibleChipRow("filter-streaming-service", "filter-streaming-service-toggle");
+    }
+  }
+
+  // Toggles which filter-panel groups are visible for the active tab. Groups
+  // with no data-view attribute (Decade/Genre/Country) are shared by both.
+  function applyFilterPanelView(view) {
+    document.querySelectorAll(".filter-group").forEach((group) => {
+      const groupView = group.dataset.view;
+      group.hidden = !!groupView && groupView !== view;
+    });
   }
 
   function setupCollapsibleChipRow(rowId, toggleId) {
@@ -334,9 +440,13 @@
       });
     }
 
-    const [key, dir] = state.sort.split("-");
+    return sortMovies(list, state.sort);
+  }
+
+  function sortMovies(list, sortValue) {
+    const [key, dir] = sortValue.split("-");
     const mul = dir === "desc" ? -1 : 1;
-    list = [...list].sort((a, b) => {
+    return [...list].sort((a, b) => {
       let av, bv;
       switch (key) {
         case "title":
@@ -370,12 +480,58 @@
       if (av > bv) return 1 * mul;
       return titleSortKey(a.title).localeCompare(titleSortKey(b.title));
     });
+  }
 
-    return list;
+  function getWatchlistFilteredSorted() {
+    let list = allWatchlist();
+
+    if (state.search.trim()) {
+      const searchRe = wordPrefixRegex(state.search.trim());
+      list = list.filter((m) => {
+        const haystacks = [
+          m.title,
+          m.originalTitle,
+          ...(m.director || []),
+          ...(m.cast || []).map((c) => c.name),
+          ...(m.genres || []),
+        ];
+        return haystacks.some((h) => h && searchRe.test(h));
+      });
+    }
+
+    if (state.watchlistFilters.genres.size) {
+      list = list.filter((m) => (m.genres || []).some((g) => state.watchlistFilters.genres.has(g)));
+    }
+    if (state.watchlistFilters.countries.size) {
+      list = list.filter((m) => (m.countries || []).some((c) => state.watchlistFilters.countries.has(c)));
+    }
+    if (state.watchlistFilters.decades.size) {
+      list = list.filter((m) => {
+        if (!m.year) return false;
+        const decade = `${Math.floor(m.year / 10) * 10}s`;
+        return state.watchlistFilters.decades.has(decade);
+      });
+    }
+    if (state.watchlistFilters.streamingAvailable !== "all") {
+      const wantAvailable = state.watchlistFilters.streamingAvailable === "yes";
+      list = list.filter((m) => ((m.streamingProviders || []).length > 0) === wantAvailable);
+    }
+    if (state.watchlistFilters.streamingServices.size) {
+      list = list.filter((m) =>
+        (m.streamingProviders || []).some((p) => state.watchlistFilters.streamingServices.has(p.name))
+      );
+    }
+
+    return sortMovies(list, state.sort);
   }
 
   // ---------- Rendering ----------
   function render() {
+    if (state.activeView === "watchlist") renderWatchlistView();
+    else renderCollectionView();
+  }
+
+  function renderCollectionView() {
     const filtered = getFilteredSorted();
     state.movies = filtered;
 
@@ -390,6 +546,26 @@
     else renderList(filtered);
   }
 
+  function renderWatchlistView() {
+    const filtered = getWatchlistFilteredSorted();
+    state.watchlist = filtered;
+
+    counterEl.textContent = `${filtered.length} movie${filtered.length === 1 ? "" : "s"}`;
+    updateWatchlistFilterBadge();
+
+    const noneAtAll = state.allWatchlist.length === 0;
+    watchlistEmptyState.hidden = filtered.length !== 0;
+    watchlistEmptyState.querySelector("p").textContent = noneAtAll
+      ? "Your watchlist is empty."
+      : "No watchlist movies match your filters.";
+    el("watchlist-empty-clear-btn").hidden = noneAtAll;
+    watchlistGrid.hidden = state.viewMode !== "grid" || filtered.length === 0;
+    watchlistList.hidden = state.viewMode !== "list" || filtered.length === 0;
+
+    if (state.viewMode === "grid") renderWatchlistGrid(filtered);
+    else renderWatchlistList(filtered);
+  }
+
   function updateFilterBadge() {
     const count =
       (state.filters.watched !== "all" ? 1 : 0) +
@@ -398,6 +574,14 @@
       state.filters.countries.size +
       state.filters.decades.size +
       (state.filters.multiCopy ? 1 : 0);
+    filterCountBadge.hidden = count === 0;
+    filterCountBadge.textContent = count;
+  }
+
+  function updateWatchlistFilterBadge() {
+    const f = state.watchlistFilters;
+    const count =
+      (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.streamingServices.size;
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
   }
@@ -435,6 +619,36 @@
     const h1 = Math.abs(hash) % 360;
     const h2 = (h1 + 45) % 360;
     return `linear-gradient(150deg, hsl(${h1} 45% 22%), hsl(${h2} 55% 14%))`;
+  }
+
+  // Every provider on a title shares the same TMDB/JustWatch link (TMDB's API
+  // has no per-provider deep link), so each icon/pill just opens that one URL.
+  function streamingProvidersHtml(movie, opts = {}) {
+    const providers = movie.streamingProviders || [];
+    if (!providers.length) {
+      return `<span class="streaming-empty">No streaming options available</span>`;
+    }
+    const link = movie.streamingLink || "#";
+    if (opts.variant === "link") {
+      return providers
+        .map(
+          (p) => `
+        <a class="streaming-link" href="${escapeHtml(link)}" target="_blank" rel="noopener">
+          ${p.logoPath ? `<img src="https://image.tmdb.org/t/p/w92${escapeHtml(p.logoPath)}" alt="">` : ""}
+          <span>${escapeHtml(p.name)}</span>
+        </a>`
+        )
+        .join("");
+    }
+    const iconClass = opts.variant === "row" ? "row-streaming-icon" : "streaming-icon";
+    return providers
+      .map(
+        (p) => `
+      <a class="${iconClass}" href="${escapeHtml(link)}" target="_blank" rel="noopener" title="${escapeHtml(p.name)}">
+        ${p.logoPath ? `<img src="https://image.tmdb.org/t/p/w92${escapeHtml(p.logoPath)}" alt="${escapeHtml(p.name)}">` : ""}
+      </a>`
+      )
+      .join("");
   }
 
   function renderGrid(movies) {
@@ -492,6 +706,63 @@
     grid.appendChild(frag);
   }
 
+  function renderWatchlistGrid(movies) {
+    watchlistGrid.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    movies.forEach((movie) => {
+      const hasStreaming = (movie.streamingProviders || []).length > 0;
+      const card = document.createElement("article");
+      card.className = "movie-card";
+      card.tabIndex = 0;
+
+      const poster = posterNode(movie, "poster");
+      if (!hasStreaming) poster.classList.add("poster-no-streaming");
+      card.appendChild(poster);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "card-remove-btn";
+      removeBtn.title = "Remove from watchlist";
+      removeBtn.setAttribute("aria-label", "Remove from watchlist");
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeFromWatchlist(movie.id);
+      });
+      card.appendChild(removeBtn);
+
+      const overlay = document.createElement("div");
+      overlay.className = "card-overlay";
+      overlay.innerHTML = `
+        ${
+          movie.imdbRating != null || movie.metascore != null
+            ? `<div class="card-scores">
+                ${movie.metascore != null ? `<div class="metascore-pill ${metascoreClass(movie.metascore)}" title="Metascore">${movie.metascore}</div>` : ""}
+                ${movie.imdbRating != null ? `<div class="rating-pill">${starIconSvg()}<span>${movie.imdbRating.toFixed(1)}</span></div>` : ""}
+              </div>`
+            : ""
+        }
+        <p class="card-title">${escapeHtml(movie.title)}</p>
+        <p class="card-meta">
+          ${movie.year ? `<span>${movie.year}</span>` : ""}
+          ${movie.runtimeMinutes ? `<span>${movie.runtimeMinutes}m</span>` : ""}
+          ${(movie.genres || [])[0] ? `<span>${escapeHtml(movie.genres[0])}</span>` : ""}
+        </p>
+        <div class="streaming-row">${streamingProvidersHtml(movie)}</div>
+      `;
+      card.appendChild(overlay);
+      overlay.querySelectorAll(".streaming-icon").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
+
+      card.addEventListener("click", () => openDetailModal(movie.id));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") openDetailModal(movie.id);
+      });
+
+      frag.appendChild(card);
+    });
+    watchlistGrid.appendChild(frag);
+  }
+
   function getVisibleListColumns() {
     return LIST_COLUMNS.filter((c) => state.listColumns.visible[c.key]);
   }
@@ -523,7 +794,7 @@
           movie.metascore != null ? `<span class="metascore-pill ${metascoreClass(movie.metascore)}">${movie.metascore}</span>` : "—"
         }</div>`;
       case "format": {
-        const copies = movie.copies && movie.copies.length ? movie.copies : [{ format: movie.format }];
+        const copies = movie.copies && movie.copies.length ? movie.copies : movie.format ? [{ format: movie.format }] : [];
         const list = copies.map((c) => c.format || "DVD").join(", ");
         return `<div class="row-cell row-format" title="${escapeHtml(list)}">${escapeHtml(list) || "—"}</div>`;
       }
@@ -616,6 +887,112 @@
     });
   }
 
+  // "Format" is meaningless for watchlist items (no owned copies), so it's
+  // excluded even if the user enabled it as an optional column on the
+  // collection tab — grid-cols/list-column preferences are shared across tabs.
+  function getVisibleWatchlistListColumns() {
+    return LIST_COLUMNS.filter((c) => c.key !== "format" && state.listColumns.visible[c.key]);
+  }
+
+  function applyWatchlistListGridTemplate() {
+    const parts = ["30px", "44px", (state.listColumns.widths.title || 260) + "px", "170px"];
+    getVisibleWatchlistListColumns().forEach((c) => {
+      parts.push((state.listColumns.widths[c.key] || c.width) + "px");
+    });
+    watchlistList.style.setProperty("--list-template", parts.join(" "));
+  }
+
+  function watchlistListHeaderCellHtml(column) {
+    return `<div class="list-header-cell" data-key="${column.key}">${escapeHtml(column.label)}<div class="col-resize-handle" data-key="${column.key}"></div></div>`;
+  }
+
+  function renderWatchlistList(movies) {
+    applyWatchlistListGridTemplate();
+    const visibleColumns = getVisibleWatchlistListColumns();
+
+    watchlistList.innerHTML = `
+      <div class="list-header">
+        <span></span><span></span>
+        <div class="list-header-cell" data-key="title">Title<div class="col-resize-handle" data-key="title"></div></div>
+        <span>Streaming</span>
+        ${visibleColumns.map(watchlistListHeaderCellHtml).join("")}
+      </div>
+    `;
+    wireWatchlistColumnResizeHandles();
+
+    const frag = document.createDocumentFragment();
+    movies.forEach((movie) => {
+      const row = document.createElement("div");
+      row.className = "movie-row";
+      row.tabIndex = 0;
+
+      const posterWrap = document.createElement("div");
+      posterWrap.className = "row-poster";
+      posterWrap.appendChild(posterNode(movie, "row-poster-img"));
+
+      row.innerHTML = `
+        <div class="row-remove-slot"></div>
+        <div class="row-poster-slot"></div>
+        <div class="row-cell row-title">${escapeHtml(movie.title)}</div>
+        <div class="row-cell row-streaming">${streamingProvidersHtml(movie, { variant: "row" })}</div>
+        ${visibleColumns.map((c) => listCellHtml(c, movie)).join("")}
+      `;
+      row.querySelector(".row-poster-slot").replaceWith(posterWrap);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "row-remove-btn";
+      removeBtn.title = "Remove from watchlist";
+      removeBtn.setAttribute("aria-label", "Remove from watchlist");
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeFromWatchlist(movie.id);
+      });
+      row.querySelector(".row-remove-slot").replaceWith(removeBtn);
+
+      row.querySelectorAll(".row-streaming-icon").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
+
+      row.addEventListener("click", () => openDetailModal(movie.id));
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") openDetailModal(movie.id);
+      });
+
+      frag.appendChild(row);
+    });
+    watchlistList.appendChild(frag);
+  }
+
+  function wireWatchlistColumnResizeHandles() {
+    watchlistList.querySelectorAll(".col-resize-handle").forEach((handle) => {
+      handle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = handle.dataset.key;
+        const allDefs = [...LOCKED_LIST_COLUMNS, ...LIST_COLUMNS];
+        const def = allDefs.find((c) => c.key === key);
+        const startX = e.clientX;
+        const startWidth = state.listColumns.widths[key] || def.width;
+        handle.classList.add("resizing");
+
+        function onMove(ev) {
+          const delta = ev.clientX - startX;
+          const newWidth = Math.max(def.minWidth || 40, Math.round(startWidth + delta));
+          state.listColumns.widths[key] = newWidth;
+          applyWatchlistListGridTemplate();
+        }
+        function onUp() {
+          handle.classList.remove("resizing");
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          saveJSON(STORAGE_KEYS.listColumns, state.listColumns);
+        }
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    });
+  }
+
   function buildColumnsMenu() {
     const menu = el("columns-menu");
     menu.innerHTML = LIST_COLUMNS.map(
@@ -658,7 +1035,7 @@
   }
 
   function getMovieById(id) {
-    return allMovies().find((m) => m.id === id);
+    return allMovies().find((m) => m.id === id) || allWatchlist().find((m) => m.id === id);
   }
 
   // ---------- Detail modal ----------
@@ -716,7 +1093,11 @@
   }
 
   function renderDetailBody(movie) {
-    const watched = isWatched(movie.id);
+    // Watchlist rows always carry a streamingProviders array (even if empty);
+    // owned-collection rows never have that field, so its presence tells us
+    // which kind of item this is without threading a separate flag around.
+    const isWatchlistItem = movie.streamingProviders !== undefined;
+    const watched = !isWatchlistItem && isWatched(movie.id);
     const backdrop = movie.backdropUrl || movie.posterUrl;
     detailBody.innerHTML = `
       <div class="detail-hero" style="${backdrop ? `background-image:url('${escapeHtml(backdrop)}')` : `background:${gradientFor(movie.title)}`}"></div>
@@ -728,18 +1109,20 @@
           <div class="detail-subline">
             ${movie.year ? `<span>${movie.year}</span>` : ""}
             ${movie.runtimeMinutes ? `<span>${movie.runtimeMinutes} min</span>` : ""}
-            ${movie.format && (movie.copies || []).length <= 1 ? `<span class="pill">${escapeHtml(movie.format)}</span>` : ""}
-            ${(movie.copies || []).length > 1 ? `<span class="pill">${movie.copies.length} copies owned</span>` : ""}
+            ${!isWatchlistItem && movie.format && (movie.copies || []).length <= 1 ? `<span class="pill">${escapeHtml(movie.format)}</span>` : ""}
+            ${!isWatchlistItem && (movie.copies || []).length > 1 ? `<span class="pill">${movie.copies.length} copies owned</span>` : ""}
             ${movie.metascore != null ? `<span class="pill metascore-pill ${metascoreClass(movie.metascore)}">${movie.metascore} Metascore</span>` : ""}
             ${movie.imdbRating != null ? `<span class="pill gold">★ ${movie.imdbRating.toFixed(1)} IMDb</span>` : ""}
           </div>
           <div class="detail-actions">
-            <button class="btn ${watched ? "btn-watched" : "btn-ghost"}" id="detail-watch-btn" type="button">
+            ${!isWatchlistItem ? `<button class="btn ${watched ? "btn-watched" : "btn-ghost"}" id="detail-watch-btn" type="button">
               ${eyeIconSvg()} ${watched ? "Watched" : "Mark as watched"}
-            </button>
+            </button>` : ""}
             ${movie.imdbLink ? `<a class="btn btn-ghost" href="${escapeHtml(movie.imdbLink)}" target="_blank" rel="noopener">IMDb ↗</a>` : ""}
             <a class="btn btn-ghost" href="https://www.youtube.com/results?search_query=${encodeURIComponent((movie.originalTitle || movie.title) + " " + (movie.year || "") + " trailer")}" target="_blank" rel="noopener">Trailer ↗</a>
-            <button class="btn btn-ghost" id="detail-edit-btn" type="button">${pencilIconSvg()} Edit</button>
+            ${!isWatchlistItem
+              ? `<button class="btn btn-ghost" id="detail-edit-btn" type="button">${pencilIconSvg()} Edit</button>`
+              : `<button class="btn btn-danger" id="detail-remove-watchlist-btn" type="button">Remove from watchlist</button>`}
           </div>
 
           ${(movie.genres || []).length ? `<div class="detail-section"><h4>Genres</h4><div class="genre-tags">${movie.genres.map((g) => `<span class="genre-tag">${escapeHtml(g)}</span>`).join("")}</div></div>` : ""}
@@ -747,6 +1130,12 @@
           ${(movie.countries || []).length ? `<div class="detail-section"><h4>Country</h4><p>${escapeHtml(movie.countries.join(", "))}</p></div>` : ""}
 
           ${movie.description ? `<div class="detail-section"><h4>Overview</h4><p>${escapeHtml(movie.description)}</p></div>` : ""}
+
+          ${isWatchlistItem ? `<div class="detail-section">
+            <h4>Where to watch (PL)</h4>
+            <div class="streaming-links">${streamingProvidersHtml(movie, { variant: "link" })}</div>
+            ${(movie.streamingProviders || []).length ? `<p class="streaming-attribution">Data provided by JustWatch</p>` : ""}
+          </div>` : ""}
 
           ${(movie.cast || []).length ? `<div class="detail-section"><h4>Cast</h4><div class="cast-grid">${movie.cast
             .slice(0, 8)
@@ -761,21 +1150,25 @@
             </dl>
           </div>` : ""}
 
-          <div class="detail-section">
+          ${!isWatchlistItem ? `<div class="detail-section">
             <h4>${(movie.copies || []).length > 1 ? `Your copies (${movie.copies.length})` : "Your copy"}</h4>
             <div class="copies-list">
               ${(movie.copies && movie.copies.length ? movie.copies : [{}]).map((c) => copyCardHtml(c)).join("")}
             </div>
-          </div>
+          </div>` : ""}
         </div>
       </div>
     `;
 
-    detailBody.querySelector("#detail-watch-btn").addEventListener("click", () => toggleWatched(movie.id));
-    detailBody.querySelector("#detail-edit-btn").addEventListener("click", () => {
-      closeDetailModal();
-      openEditModal(movie.id);
-    });
+    if (!isWatchlistItem) {
+      detailBody.querySelector("#detail-watch-btn").addEventListener("click", () => toggleWatched(movie.id));
+      detailBody.querySelector("#detail-edit-btn").addEventListener("click", () => {
+        closeDetailModal();
+        openEditModal(movie.id);
+      });
+    } else {
+      detailBody.querySelector("#detail-remove-watchlist-btn").addEventListener("click", () => removeFromWatchlist(movie.id));
+    }
   }
 
   // ---------- Edit / add modal ----------
@@ -788,9 +1181,11 @@
   let searchDebounceTimer = null;
   let selectedMovie = null; // full merged TMDB+OMDb record for the movie about to be added
   let duplicateOfExisting = null; // set when selectedMovie's imdbId matches a movie already on the shelf
+  let addTarget = "collection"; // collection | watchlist — which list the add flow writes to
 
-  function openEditModal(id) {
+  function openEditModal(id, target = "collection") {
     state.editingId = id || null;
+    addTarget = id ? "collection" : target;
     editForm.reset();
     resetAddPanel();
     if (id) {
@@ -811,10 +1206,11 @@
       editForm.imdbId.value = movie.imdbId || "";
       editForm.description.value = movie.description || "";
     } else {
-      editModalTitle.textContent = "Add movie";
+      editModalTitle.textContent = addTarget === "watchlist" ? "Add to watchlist" : "Add movie";
       deleteMovieBtn.hidden = true;
       addPanel.hidden = false;
       editForm.hidden = true;
+      el("add-format-field").hidden = addTarget === "watchlist";
     }
     editModal.hidden = false;
   }
@@ -836,7 +1232,7 @@
     el("movie-preview").innerHTML = "";
     el("add-format-select").value = "DVD";
     el("confirm-add-btn").disabled = true;
-    el("confirm-add-btn").textContent = "Add to shelf";
+    el("confirm-add-btn").textContent = addTarget === "watchlist" ? "Add to watchlist" : "Add to shelf";
     setSearchStatus("");
   }
 
@@ -913,12 +1309,17 @@
 
   function updateConfirmButtonLabel() {
     const btn = el("confirm-add-btn");
+    if (addTarget === "watchlist") {
+      btn.textContent = "Add to watchlist";
+      return;
+    }
     btn.textContent = duplicateOfExisting ? `Add ${el("add-format-select").value} copy` : "Add to shelf";
   }
 
   function applySelectedMovie(data) {
     selectedMovie = data;
-    duplicateOfExisting = data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
+    duplicateOfExisting =
+      addTarget === "watchlist" ? null : data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
     renderMoviePreview(data);
     setSearchStatus("");
     el("confirm-add-btn").disabled = false;
@@ -1007,10 +1408,119 @@
 
   el("add-format-select").addEventListener("change", updateConfirmButtonLabel);
 
+  async function confirmAddToWatchlist() {
+    const btn = el("confirm-add-btn");
+    btn.textContent = "Adding…";
+
+    const newItem = {
+      id: "wl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      title: selectedMovie.title,
+      originalTitle: selectedMovie.originalTitle || selectedMovie.title,
+      originalLanguage: selectedMovie.originalLanguage || null,
+      year: selectedMovie.year || null,
+      imdbRating: selectedMovie.imdbRating ?? null,
+      imdbVotes: selectedMovie.imdbVotes ?? null,
+      metascore: selectedMovie.metascore ?? null,
+      runtimeMinutes: selectedMovie.runtimeMinutes || null,
+      genres: selectedMovie.genres || [],
+      countries: selectedMovie.countries || [],
+      director: selectedMovie.director || [],
+      writers: selectedMovie.writers || [],
+      cast: selectedMovie.cast || [],
+      studios: selectedMovie.studios || [],
+      description: selectedMovie.description || null,
+      posterUrl: selectedMovie.posterUrl || null,
+      backdropUrl: selectedMovie.backdropUrl || null,
+      tmdbId: selectedMovie.tmdbId || null,
+      imdbId: selectedMovie.imdbId || null,
+      imdbLink: selectedMovie.imdbLink || null,
+      dateAdded: new Date().toISOString(),
+      streamingProviders: [],
+      streamingLink: null,
+    };
+
+    const { error } = await window.supabaseClient.from("watchlist").insert(toDbColumnsWatchlist(newItem));
+    btn.disabled = false;
+    btn.textContent = "Add to watchlist";
+    if (error) {
+      console.error(error);
+      showToast("Failed to add to watchlist");
+      return;
+    }
+    state.allWatchlist.push(newItem);
+    showToast("Added to watchlist");
+    closeEditModal();
+    buildWatchlistFilterChips();
+    render();
+
+    if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId);
+  }
+
+  async function fetchAndStoreStreamingProviders(id, tmdbId) {
+    try {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const res = await fetch(`/api/watch-providers?tmdbId=${tmdbId}`, {
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Lookup failed");
+      const fetchedAt = new Date().toISOString();
+      const { error } = await window.supabaseClient
+        .from("watchlist")
+        .update({ streaming_pl: data.providers, streaming_link: data.link, streaming_fetched_at: fetchedAt })
+        .eq("id", id);
+      if (error) throw error;
+      const item = state.allWatchlist.find((w) => w.id === id);
+      if (item) {
+        item.streamingProviders = data.providers;
+        item.streamingLink = data.link;
+        item.streamingFetchedAt = fetchedAt;
+        buildWatchlistFilterChips();
+        if (state.activeView === "watchlist") render();
+        if (detailModalOpenId === id) renderDetailBody(item);
+      }
+    } catch (err) {
+      // Silent: the watchlist item is already added/visible, just without
+      // streaming data until the next successful fetch.
+      console.error(err);
+    }
+  }
+
+  // Keeps cached streaming availability roughly in sync with TMDB's own
+  // once-a-day refresh from JustWatch, without a live call on every render.
+  function refreshStaleStreamingProviders() {
+    const STALE_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    state.allWatchlist
+      .filter((w) => w.tmdbId && (!w.streamingFetchedAt || now - new Date(w.streamingFetchedAt).getTime() > STALE_MS))
+      .forEach((w) => fetchAndStoreStreamingProviders(w.id, w.tmdbId));
+  }
+
+  async function removeFromWatchlist(id) {
+    if (!confirm("Remove this movie from your watchlist?")) return;
+    const { error } = await window.supabaseClient.from("watchlist").delete().eq("id", id);
+    if (error) {
+      console.error(error);
+      showToast("Failed to remove from watchlist");
+      return;
+    }
+    state.allWatchlist = state.allWatchlist.filter((m) => m.id !== id);
+    showToast("Removed from watchlist");
+    if (detailModalOpenId === id) closeDetailModal();
+    buildWatchlistFilterChips();
+    render();
+  }
+
   el("confirm-add-btn").addEventListener("click", async () => {
     if (!selectedMovie) return;
     const btn = el("confirm-add-btn");
     btn.disabled = true;
+
+    if (addTarget === "watchlist") {
+      await confirmAddToWatchlist();
+      return;
+    }
+
     const format = el("add-format-select").value;
 
     if (duplicateOfExisting) {
@@ -1215,8 +1725,33 @@
 
   function applyGridCols() {
     grid.style.setProperty("--grid-cols", state.gridCols);
+    if (watchlistGrid) watchlistGrid.style.setProperty("--grid-cols", state.gridCols);
     el("grid-cols-slider").value = state.gridCols;
     el("grid-cols-value").textContent = state.gridCols;
+  }
+
+  // Not available in the demo (no watchlist tab/DOM there) — only called
+  // from real-mode code paths (init, tab click handlers).
+  function switchView(view, opts = {}) {
+    state.activeView = view;
+    if (!opts.skipSave) localStorage.setItem(STORAGE_KEYS.activeView, view);
+    el("tab-collection").classList.toggle("active", view === "collection");
+    el("tab-watchlist").classList.toggle("active", view === "watchlist");
+
+    // Force every content container hidden, then let render() below
+    // un-hide only the pair that belongs to the newly active view.
+    grid.hidden = true;
+    list.hidden = true;
+    emptyState.hidden = true;
+    watchlistGrid.hidden = true;
+    watchlistList.hidden = true;
+    watchlistEmptyState.hidden = true;
+
+    if (view === "watchlist") buildWatchlistFilterChips();
+    else buildFilterChips();
+    applyFilterPanelView(view);
+    el("add-movie-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
+    render();
   }
 
   // ---------- Toast ----------
@@ -1272,7 +1807,10 @@
     el("filter-toggle-btn").addEventListener("click", () => {
       filterPanel.hidden = !filterPanel.hidden;
       el("filter-toggle-btn").classList.toggle("active", !filterPanel.hidden);
-      if (!filterPanel.hidden) setupCollapsibleChipRow("filter-country", "filter-country-toggle");
+      if (!filterPanel.hidden) {
+        setupCollapsibleChipRow("filter-country", "filter-country-toggle");
+        if (state.activeView === "watchlist") setupCollapsibleChipRow("filter-streaming-service", "filter-streaming-service-toggle");
+      }
     });
 
     buildColumnsMenu();
@@ -1307,8 +1845,22 @@
       });
     });
 
-    el("filter-clear-btn").addEventListener("click", clearFilters);
+    document.querySelectorAll("#filter-streaming-available .chip").forEach((chip) => {
+      chip.classList.toggle("active", chip.dataset.value === "all");
+      chip.addEventListener("click", () => {
+        state.watchlistFilters.streamingAvailable = chip.dataset.value;
+        document.querySelectorAll("#filter-streaming-available .chip").forEach((c) => c.classList.toggle("active", c === chip));
+        render();
+      });
+    });
+
+    el("filter-clear-btn").addEventListener("click", () => {
+      if (state.activeView === "watchlist") clearWatchlistFilters();
+      else clearFilters();
+    });
     el("empty-clear-btn").addEventListener("click", clearFilters);
+    const watchlistEmptyClearBtn = el("watchlist-empty-clear-btn");
+    if (watchlistEmptyClearBtn) watchlistEmptyClearBtn.addEventListener("click", clearWatchlistFilters);
 
     if (DEMO_MODE) {
       const addBtn = el("add-movie-btn");
@@ -1319,7 +1871,13 @@
       // deliberately not using the disabled attribute since that also
       // suppresses the hover tooltip in most browsers.
     } else {
-      el("add-movie-btn").addEventListener("click", () => openEditModal(null));
+      el("add-movie-btn").addEventListener("click", () => openEditModal(null, state.activeView));
+    }
+    const tabCollectionBtn = el("tab-collection");
+    const tabWatchlistBtn = el("tab-watchlist");
+    if (tabCollectionBtn && tabWatchlistBtn) {
+      tabCollectionBtn.addEventListener("click", () => switchView("collection"));
+      tabWatchlistBtn.addEventListener("click", () => switchView("watchlist"));
     }
     el("home-btn").addEventListener("click", goHome);
     const signOutBtn = el("sign-out-btn");
@@ -1357,12 +1915,23 @@
     render();
   }
 
+  function clearWatchlistFilters() {
+    state.watchlistFilters.genres.clear();
+    state.watchlistFilters.countries.clear();
+    state.watchlistFilters.decades.clear();
+    state.watchlistFilters.streamingAvailable = "all";
+    state.watchlistFilters.streamingServices.clear();
+    document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.value === "all"));
+    render();
+  }
+
   function goHome() {
     state.search = "";
     el("search-input").value = "";
     filterPanel.hidden = true;
     el("filter-toggle-btn").classList.remove("active");
-    clearFilters();
+    if (state.activeView === "watchlist") clearWatchlistFilters();
+    else clearFilters();
   }
 
   init();
