@@ -150,11 +150,31 @@
   <div class="modal edit-modal">
     <button class="modal-close" data-close-edit aria-label="Close">×</button>
     <h2 id="edit-modal-title">Add movie</h2>
-    <div class="lookup-row" id="lookup-row">
-      <input type="text" id="lookup-query" placeholder="Movie title or IMDb ID (tt0050083)" autocomplete="off" />
-      <button type="button" id="lookup-btn" class="btn btn-ghost">Look up</button>
+
+    <div id="add-panel">
+      <div class="lookup-row">
+        <input type="text" id="search-query" placeholder="Movie title or IMDb ID (tt0050083)" autocomplete="off" />
+      </div>
+      <div id="search-results" class="search-results" hidden></div>
+      <p id="search-status" class="lookup-status" hidden></p>
+      <div id="movie-preview" class="movie-preview" hidden></div>
+      <div class="form-actions">
+        <label class="field" id="add-format-field">
+          <span>Format</span>
+          <select id="add-format-select">
+            <option value="DVD">DVD</option>
+            <option value="Blu-ray">Blu-ray</option>
+            <option value="4K Ultra HD">4K Ultra HD</option>
+            <option value="Digital">Digital</option>
+          </select>
+        </label>
+        <div class="form-actions-right">
+          <button type="button" class="btn btn-ghost" data-close-edit>Cancel</button>
+          <button type="button" id="confirm-add-btn" class="btn btn-primary" disabled>Add to shelf</button>
+        </div>
+      </div>
     </div>
-    <p id="lookup-status" class="lookup-status" hidden></p>
+
     <form id="edit-form">
       <div class="form-grid">
         <label class="field field-wide">

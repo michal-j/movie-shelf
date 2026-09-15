@@ -5,6 +5,8 @@
 //
 // GET /api/movie-lookup?imdbId=tt0050083
 // GET /api/movie-lookup?title=12+Angry+Men&year=1957
+// GET /api/movie-lookup?tmdbId=389 (used when the caller already resolved
+// an exact match via /api/movie-search and just needs the full record)
 //
 // Returns a camelCase object matching the shape app.js already works with
 // (same keys as SELECT_COLUMNS in app.js), covering everything the app
@@ -59,7 +61,8 @@ async function omdbFetch(params) {
   return res.json();
 }
 
-async function resolveTmdbId(imdbId, title, year) {
+async function resolveTmdbId(imdbId, title, year, tmdbIdParam) {
+  if (tmdbIdParam) return Number(tmdbIdParam);
   if (imdbId) {
     const found = await tmdbFetch(`/find/${imdbId}`, { external_source: "imdb_id" });
     return found.movie_results?.[0]?.id || null;
@@ -85,14 +88,15 @@ module.exports = async (req, res) => {
   const imdbIdParam = (req.query.imdbId || "").trim() || null;
   const titleParam = (req.query.title || "").trim() || null;
   const yearParam = (req.query.year || "").trim() || null;
+  const tmdbIdParam = (req.query.tmdbId || "").trim() || null;
 
-  if (!imdbIdParam && !titleParam) {
-    res.status(400).json({ error: "Pass imdbId or title" });
+  if (!imdbIdParam && !titleParam && !tmdbIdParam) {
+    res.status(400).json({ error: "Pass imdbId, tmdbId, or title" });
     return;
   }
 
   try {
-    const tmdbId = await resolveTmdbId(imdbIdParam, titleParam, yearParam);
+    const tmdbId = await resolveTmdbId(imdbIdParam, titleParam, yearParam, tmdbIdParam);
     if (!tmdbId) {
       res.status(404).json({ error: "No match found on TMDB" });
       return;

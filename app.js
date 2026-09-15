@@ -748,19 +748,21 @@
   const editForm = el("edit-form");
   const editModalTitle = el("edit-modal-title");
   const deleteMovieBtn = el("delete-movie-btn");
+  const addPanel = el("add-panel");
 
-  let lookupExtra = null; // fields the form has no input for: posterUrl, backdropUrl, tmdbId, etc.
+  let searchDebounceTimer = null;
+  let selectedMovie = null; // full merged TMDB+OMDb record for the movie about to be added
 
   function openEditModal(id) {
     state.editingId = id || null;
     editForm.reset();
-    lookupExtra = null;
-    setLookupStatus("");
+    resetAddPanel();
     if (id) {
       const movie = getMovieById(id);
       editModalTitle.textContent = "Edit movie";
       deleteMovieBtn.hidden = false;
-      el("lookup-row").hidden = true;
+      addPanel.hidden = true;
+      editForm.hidden = false;
       editForm.title.value = movie.title || "";
       editForm.originalTitle.value = movie.originalTitle || "";
       editForm.year.value = movie.year || "";
@@ -775,8 +777,8 @@
     } else {
       editModalTitle.textContent = "Add movie";
       deleteMovieBtn.hidden = true;
-      el("lookup-row").hidden = false;
-      el("lookup-query").value = "";
+      addPanel.hidden = false;
+      editForm.hidden = true;
     }
     editModal.hidden = false;
   }
@@ -784,64 +786,239 @@
   function closeEditModal() {
     editModal.hidden = true;
     state.editingId = null;
-    lookupExtra = null;
+    resetAddPanel();
   }
 
-  function setLookupStatus(msg, isError) {
-    const el2 = el("lookup-status");
-    el2.hidden = !msg;
-    el2.textContent = msg;
-    el2.classList.toggle("error", !!isError);
+  function resetAddPanel() {
+    selectedMovie = null;
+    clearTimeout(searchDebounceTimer);
+    el("search-query").value = "";
+    el("search-results").hidden = true;
+    el("search-results").innerHTML = "";
+    el("movie-preview").hidden = true;
+    el("movie-preview").innerHTML = "";
+    el("add-format-select").value = "DVD";
+    el("confirm-add-btn").disabled = true;
+    setSearchStatus("");
   }
 
-  function applyLookupResult(data) {
-    editForm.title.value = data.title || "";
-    editForm.originalTitle.value = data.originalTitle || "";
-    editForm.year.value = data.year || "";
-    editForm.runtimeMinutes.value = data.runtimeMinutes || "";
-    editForm.imdbRating.value = data.imdbRating ?? "";
-    editForm.genres.value = (data.genres || []).join(", ");
-    editForm.director.value = (data.director || []).join(", ");
-    editForm.cast.value = (data.cast || []).map((c) => c.name).join(", ");
-    editForm.imdbId.value = data.imdbId || "";
-    editForm.description.value = data.description || "";
-    lookupExtra = {
-      posterUrl: data.posterUrl,
-      backdropUrl: data.backdropUrl,
-      tmdbId: data.tmdbId,
-      imdbVotes: data.imdbVotes,
-      metascore: data.metascore,
-      countries: data.countries || [],
-      originalLanguage: data.originalLanguage,
-      studios: data.studios || [],
-      cast: data.cast || [],
-    };
+  function setSearchStatus(msg, isError) {
+    const statusEl = el("search-status");
+    statusEl.hidden = !msg;
+    statusEl.textContent = msg;
+    statusEl.classList.toggle("error", !!isError);
   }
 
-  el("lookup-btn").addEventListener("click", async () => {
-    const query = el("lookup-query").value.trim();
-    if (!query) return;
-    const btn = el("lookup-btn");
-    btn.disabled = true;
-    btn.textContent = "Looking up…";
-    setLookupStatus("");
+  function renderSearchResults(results) {
+    const container = el("search-results");
+    if (!results.length) {
+      container.hidden = true;
+      container.innerHTML = "";
+      setSearchStatus("No matches found. Try a different title, or paste an IMDb ID.", true);
+      return;
+    }
+    setSearchStatus("");
+    container.hidden = false;
+    container.innerHTML = results
+      .map(
+        (r, i) => `
+      <button type="button" class="search-result-item" data-index="${i}">
+        <div class="search-result-poster">${r.posterUrl ? `<img src="${escapeHtml(r.posterUrl)}" alt="">` : ""}</div>
+        <div class="search-result-text">
+          <div class="search-result-title">${escapeHtml(r.title)}</div>
+          <div class="search-result-year">${r.year || "—"}</div>
+        </div>
+      </button>
+    `
+      )
+      .join("");
+    container.querySelectorAll(".search-result-item").forEach((btn) => {
+      btn.addEventListener("click", () => selectMovie(results[Number(btn.dataset.index)]));
+    });
+  }
+
+  async function selectMovie(result) {
+    el("search-results").hidden = true;
+    setSearchStatus("Loading details…");
     try {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
-      const isImdbId = /^tt\d+$/i.test(query);
-      const qs = isImdbId ? `imdbId=${encodeURIComponent(query)}` : `title=${encodeURIComponent(query)}`;
-      const res = await fetch(`/api/movie-lookup?${qs}`, {
+      const res = await fetch(`/api/movie-lookup?tmdbId=${result.tmdbId}`, {
         headers: { Authorization: `Bearer ${session?.access_token || ""}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Lookup failed");
-      applyLookupResult(data);
-      setLookupStatus(`Found "${data.title}" (${data.year || "?"}) — review the fields below, then save.`);
+      applySelectedMovie(data);
     } catch (err) {
-      setLookupStatus(err.message || "Lookup failed", true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Look up";
+      setSearchStatus(err.message || "Lookup failed", true);
     }
+  }
+
+  async function lookupByImdbId(imdbId) {
+    setSearchStatus("Looking up…");
+    try {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const res = await fetch(`/api/movie-lookup?imdbId=${encodeURIComponent(imdbId)}`, {
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Lookup failed");
+      applySelectedMovie(data);
+    } catch (err) {
+      setSearchStatus(err.message || "Lookup failed", true);
+    }
+  }
+
+  function applySelectedMovie(data) {
+    selectedMovie = data;
+    renderMoviePreview(data);
+    setSearchStatus("");
+    el("confirm-add-btn").disabled = false;
+  }
+
+  function renderMoviePreview(data) {
+    const preview = el("movie-preview");
+    preview.hidden = false;
+    preview.innerHTML = `
+      <div class="movie-preview-poster">${data.posterUrl ? `<img src="${escapeHtml(data.posterUrl)}" alt="">` : ""}</div>
+      <div class="movie-preview-info">
+        <p class="movie-preview-title">${escapeHtml(data.title)}</p>
+        ${data.originalTitle && data.originalTitle !== data.title ? `<p class="movie-preview-original">${escapeHtml(data.originalTitle)}</p>` : ""}
+        <div class="movie-preview-subline">
+          ${data.year ? `<span>${data.year}</span>` : ""}
+          ${data.runtimeMinutes ? `<span>${data.runtimeMinutes} min</span>` : ""}
+          ${data.metascore != null ? `<span class="pill metascore-pill ${metascoreClass(data.metascore)}">${data.metascore} Metascore</span>` : ""}
+          ${data.imdbRating != null ? `<span class="pill gold">★ ${data.imdbRating.toFixed(1)} IMDb</span>` : ""}
+        </div>
+        ${data.description ? `<p class="movie-preview-overview">${escapeHtml(data.description)}</p>` : ""}
+        <div class="movie-preview-meta">
+          ${(data.genres || []).length ? `<div><strong>Genres:</strong> ${escapeHtml(data.genres.join(", "))}</div>` : ""}
+          ${(data.director || []).length ? `<div><strong>Director:</strong> ${escapeHtml(data.director.join(", "))}</div>` : ""}
+          ${(data.cast || []).length ? `<div><strong>Cast:</strong> ${escapeHtml(data.cast.slice(0, 6).map((c) => c.name).join(", "))}</div>` : ""}
+        </div>
+        <button type="button" class="btn-text search-again-btn" id="search-again-btn">Search again</button>
+      </div>
+    `;
+    el("search-again-btn").addEventListener("click", () => {
+      selectedMovie = null;
+      preview.hidden = true;
+      preview.innerHTML = "";
+      el("confirm-add-btn").disabled = true;
+      el("search-query").value = "";
+      el("search-query").focus();
+    });
+  }
+
+  async function runTitleSearch(query) {
+    setSearchStatus("Searching…");
+    try {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const res = await fetch(`/api/movie-search?title=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Search failed");
+      renderSearchResults(data.results || []);
+    } catch (err) {
+      el("search-results").hidden = true;
+      setSearchStatus(err.message || "Search failed", true);
+    }
+  }
+
+  el("search-query").addEventListener("input", (e) => {
+    const query = e.target.value.trim();
+    clearTimeout(searchDebounceTimer);
+    selectedMovie = null;
+    el("movie-preview").hidden = true;
+    el("movie-preview").innerHTML = "";
+    el("confirm-add-btn").disabled = true;
+
+    if (!query) {
+      el("search-results").hidden = true;
+      setSearchStatus("");
+      return;
+    }
+
+    if (/^tt\d+$/i.test(query)) {
+      el("search-results").hidden = true;
+      searchDebounceTimer = setTimeout(() => lookupByImdbId(query), 400);
+      return;
+    }
+
+    if (query.length < 2) {
+      el("search-results").hidden = true;
+      return;
+    }
+
+    searchDebounceTimer = setTimeout(() => runTitleSearch(query), 350);
+  });
+
+  el("confirm-add-btn").addEventListener("click", async () => {
+    if (!selectedMovie) return;
+    const btn = el("confirm-add-btn");
+    btn.disabled = true;
+    btn.textContent = "Adding…";
+    const format = el("add-format-select").value;
+
+    const newMovie = {
+      id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      title: selectedMovie.title,
+      originalTitle: selectedMovie.originalTitle || selectedMovie.title,
+      originalLanguage: selectedMovie.originalLanguage || null,
+      year: selectedMovie.year || null,
+      imdbRating: selectedMovie.imdbRating ?? null,
+      imdbVotes: selectedMovie.imdbVotes ?? null,
+      metascore: selectedMovie.metascore ?? null,
+      runtimeMinutes: selectedMovie.runtimeMinutes || null,
+      genres: selectedMovie.genres || [],
+      countries: selectedMovie.countries || [],
+      director: selectedMovie.director || [],
+      writers: selectedMovie.writers || [],
+      cast: selectedMovie.cast || [],
+      studios: selectedMovie.studios || [],
+      format,
+      edition: "",
+      aspectRatio: "",
+      audioLanguages: [],
+      subtitleLanguages: [],
+      hasExtras: false,
+      description: selectedMovie.description || null,
+      posterUrl: selectedMovie.posterUrl || null,
+      backdropUrl: selectedMovie.backdropUrl || null,
+      tmdbId: selectedMovie.tmdbId || null,
+      imdbId: selectedMovie.imdbId || null,
+      imdbLink: selectedMovie.imdbLink || null,
+      dateAdded: new Date().toISOString(),
+      watched: false,
+      copies: [
+        {
+          format,
+          formatDetail: null,
+          edition: null,
+          distributor: null,
+          aspectRatio: null,
+          audioLanguages: [],
+          subtitleLanguages: [],
+          extras: null,
+          polishLicensedRelease: null,
+          notes: null,
+          source: "manual",
+        },
+      ],
+    };
+
+    const { error } = await window.supabaseClient.from("movies").insert(toDbColumns(newMovie));
+    btn.disabled = false;
+    btn.textContent = "Add to shelf";
+    if (error) {
+      console.error(error);
+      showToast("Failed to add movie");
+      return;
+    }
+    state.allMovies.push(newMovie);
+    showToast("Movie added");
+    closeEditModal();
+    buildFilterChips();
+    render();
   });
 
   function splitCsv(value) {
@@ -853,6 +1030,7 @@
 
   editForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!state.editingId) return;
     const fd = new FormData(editForm);
     const patch = {
       title: fd.get("title").trim(),
@@ -871,67 +1049,19 @@
 
     const submitBtn = editForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-
-    if (state.editingId) {
-      const { error } = await window.supabaseClient
-        .from("movies")
-        .update(toDbColumns(patch))
-        .eq("id", state.editingId);
-      submitBtn.disabled = false;
-      if (error) {
-        console.error(error);
-        showToast("Failed to update movie");
-        return;
-      }
-      const idx = state.allMovies.findIndex((m) => m.id === state.editingId);
-      state.allMovies[idx] = { ...state.allMovies[idx], ...patch };
-      showToast("Movie updated");
-    } else {
-      const newMovie = {
-        id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        ...patch,
-        cast: lookupExtra?.cast?.length ? lookupExtra.cast : patch.cast,
-        studios: lookupExtra?.studios || [],
-        edition: "",
-        aspectRatio: "",
-        audioLanguages: [],
-        subtitleLanguages: [],
-        hasExtras: false,
-        dateAdded: new Date().toISOString(),
-        posterUrl: lookupExtra?.posterUrl || null,
-        backdropUrl: lookupExtra?.backdropUrl || null,
-        tmdbId: lookupExtra?.tmdbId || null,
-        imdbVotes: lookupExtra?.imdbVotes ?? null,
-        metascore: lookupExtra?.metascore ?? null,
-        countries: lookupExtra?.countries || [],
-        originalLanguage: lookupExtra?.originalLanguage || null,
-        watched: false,
-        copies: [
-          {
-            format: patch.format,
-            formatDetail: null,
-            edition: null,
-            distributor: null,
-            aspectRatio: null,
-            audioLanguages: [],
-            subtitleLanguages: [],
-            extras: null,
-            polishLicensedRelease: null,
-            notes: null,
-            source: "manual",
-          },
-        ],
-      };
-      const { error } = await window.supabaseClient.from("movies").insert(toDbColumns(newMovie));
-      submitBtn.disabled = false;
-      if (error) {
-        console.error(error);
-        showToast("Failed to add movie");
-        return;
-      }
-      state.allMovies.push(newMovie);
-      showToast("Movie added");
+    const { error } = await window.supabaseClient
+      .from("movies")
+      .update(toDbColumns(patch))
+      .eq("id", state.editingId);
+    submitBtn.disabled = false;
+    if (error) {
+      console.error(error);
+      showToast("Failed to update movie");
+      return;
     }
+    const idx = state.allMovies.findIndex((m) => m.id === state.editingId);
+    state.allMovies[idx] = { ...state.allMovies[idx], ...patch };
+    showToast("Movie updated");
     closeEditModal();
     buildFilterChips();
     render();
