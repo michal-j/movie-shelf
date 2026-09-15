@@ -1312,8 +1312,12 @@
 
     if (DEMO_MODE) {
       const addBtn = el("add-movie-btn");
-      addBtn.disabled = true;
+      addBtn.classList.add("btn-inert");
+      addBtn.setAttribute("aria-disabled", "true");
       addBtn.title = "Not available in the demo — sign in to add movies";
+      // No click listener attached, so the button is functionally inert;
+      // deliberately not using the disabled attribute since that also
+      // suppresses the hover tooltip in most browsers.
     } else {
       el("add-movie-btn").addEventListener("click", () => openEditModal(null));
     }

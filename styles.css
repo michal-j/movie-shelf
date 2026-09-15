@@ -135,6 +135,12 @@ img { max-width: 100%; }
 .btn-danger { background: transparent; border-color: #7a2b36; color: #f2879a; }
 .btn-danger:hover { background: #3a1620; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+/* For buttons that need a hover tooltip while inert: native `disabled` (and
+   pointer-events:none above) block hover/title tooltips entirely in most
+   browsers, so use this instead — same look, but hover still works because
+   the element is never made non-interactive. Pair with aria-disabled and no
+   click listener, not the disabled attribute. */
+.btn-inert { opacity: 0.45; cursor: not-allowed; }
 .btn-text {
   background: none; border: none; color: var(--text-dim); font-size: 13px;
   cursor: pointer; text-decoration: underline; padding: 0;
