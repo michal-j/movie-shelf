@@ -347,30 +347,6 @@ main#content { padding: 20px; }
 
 .poster-no-streaming { filter: grayscale(1); opacity: 0.55; }
 
-.card-remove-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(10,11,14,0.75);
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 4;
-  opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease;
-}
-.movie-card:hover .card-remove-btn,
-.movie-card:focus-visible .card-remove-btn { opacity: 1; }
-.card-remove-btn:hover { background: var(--accent); }
-
 .streaming-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .streaming-icon { width: 20px; height: 20px; border-radius: 4px; overflow: hidden; background: #20232b; flex-shrink: 0; }
 .streaming-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -507,22 +483,6 @@ main#content { padding: 20px; }
 .row-streaming { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .row-streaming-icon { width: 18px; height: 18px; border-radius: 3px; overflow: hidden; flex-shrink: 0; background: #20232b; }
 .row-streaming-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.row-remove-btn {
-  background: none;
-  border: none;
-  color: var(--text-faint);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.row-remove-btn:hover { color: var(--accent); background: var(--accent-dim); }
 
 .movie-list .list-header {
   display: grid;

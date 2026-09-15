@@ -106,12 +106,36 @@
     { key: "director", label: "Director", width: 170, minWidth: 90, defaultVisible: false },
   ];
 
+  // Watchlist's locked/optional list columns mirror the collection's, minus
+  // Format (meaningless without owned copies) and plus a Streaming column.
+  const WATCHLIST_LOCKED_LIST_COLUMNS = [
+    { key: "poster", width: 44 },
+    { key: "title", label: "Title", width: 260, minWidth: 140, resizable: true },
+  ];
+
+  const WATCHLIST_LIST_COLUMNS = [
+    { key: "originalTitle", label: "Original Title", width: 200, minWidth: 90, defaultVisible: true },
+    { key: "streaming", label: "Streaming", width: 170, minWidth: 100, defaultVisible: true },
+    { key: "genres", label: "Genre", width: 160, minWidth: 70, defaultVisible: true },
+    { key: "year", label: "Year", width: 70, minWidth: 50, defaultVisible: true },
+    { key: "runtime", label: "Runtime", width: 80, minWidth: 55, defaultVisible: true },
+    { key: "rating", label: "IMDb Rating", width: 90, minWidth: 60, defaultVisible: true },
+    { key: "metascore", label: "Metascore", width: 90, minWidth: 60, defaultVisible: false },
+    { key: "director", label: "Director", width: 170, minWidth: 90, defaultVisible: false },
+  ];
+
+  // state.listColumns is shared across both tabs, so its defaults need to
+  // cover every key either tab's optional columns can use (harmless overlap
+  // on shared keys like "year" — same width/visibility either way).
   function defaultListColumns() {
+    const optionalByKey = new Map();
+    [...LIST_COLUMNS, ...WATCHLIST_LIST_COLUMNS].forEach((c) => {
+      if (!optionalByKey.has(c.key)) optionalByKey.set(c.key, c);
+    });
+    const resizableLocked = [...LOCKED_LIST_COLUMNS, ...WATCHLIST_LOCKED_LIST_COLUMNS].filter((c) => c.resizable);
     return {
-      visible: Object.fromEntries(LIST_COLUMNS.map((c) => [c.key, c.defaultVisible])),
-      widths: Object.fromEntries(
-        [...LOCKED_LIST_COLUMNS.filter((c) => c.resizable), ...LIST_COLUMNS].map((c) => [c.key, c.width])
-      ),
+      visible: Object.fromEntries([...optionalByKey.values()].map((c) => [c.key, c.defaultVisible])),
+      widths: Object.fromEntries([...resizableLocked, ...optionalByKey.values()].map((c) => [c.key, c.width])),
     };
   }
 
@@ -719,18 +743,6 @@
       if (!hasStreaming) poster.classList.add("poster-no-streaming");
       card.appendChild(poster);
 
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "card-remove-btn";
-      removeBtn.title = "Remove from watchlist";
-      removeBtn.setAttribute("aria-label", "Remove from watchlist");
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeFromWatchlist(movie.id);
-      });
-      card.appendChild(removeBtn);
-
       const overlay = document.createElement("div");
       overlay.className = "card-overlay";
       overlay.innerHTML = `
@@ -800,6 +812,8 @@
       }
       case "director":
         return `<div class="row-cell row-director">${escapeHtml((movie.director || []).join(", ")) || "—"}</div>`;
+      case "streaming":
+        return `<div class="row-cell row-streaming">${streamingProvidersHtml(movie, { variant: "row" })}</div>`;
       default:
         return `<div class="row-cell"></div>`;
     }
@@ -891,11 +905,11 @@
   // excluded even if the user enabled it as an optional column on the
   // collection tab — grid-cols/list-column preferences are shared across tabs.
   function getVisibleWatchlistListColumns() {
-    return LIST_COLUMNS.filter((c) => c.key !== "format" && state.listColumns.visible[c.key]);
+    return WATCHLIST_LIST_COLUMNS.filter((c) => state.listColumns.visible[c.key]);
   }
 
   function applyWatchlistListGridTemplate() {
-    const parts = ["30px", "44px", (state.listColumns.widths.title || 260) + "px", "170px"];
+    const parts = ["44px", (state.listColumns.widths.title || 260) + "px"];
     getVisibleWatchlistListColumns().forEach((c) => {
       parts.push((state.listColumns.widths[c.key] || c.width) + "px");
     });
@@ -912,9 +926,8 @@
 
     watchlistList.innerHTML = `
       <div class="list-header">
-        <span></span><span></span>
+        <span></span>
         <div class="list-header-cell" data-key="title">Title<div class="col-resize-handle" data-key="title"></div></div>
-        <span>Streaming</span>
         ${visibleColumns.map(watchlistListHeaderCellHtml).join("")}
       </div>
     `;
@@ -922,34 +935,23 @@
 
     const frag = document.createDocumentFragment();
     movies.forEach((movie) => {
+      const hasStreaming = (movie.streamingProviders || []).length > 0;
       const row = document.createElement("div");
       row.className = "movie-row";
       row.tabIndex = 0;
 
       const posterWrap = document.createElement("div");
       posterWrap.className = "row-poster";
-      posterWrap.appendChild(posterNode(movie, "row-poster-img"));
+      const posterImg = posterNode(movie, "row-poster-img");
+      if (!hasStreaming) posterImg.classList.add("poster-no-streaming");
+      posterWrap.appendChild(posterImg);
 
       row.innerHTML = `
-        <div class="row-remove-slot"></div>
         <div class="row-poster-slot"></div>
         <div class="row-cell row-title">${escapeHtml(movie.title)}</div>
-        <div class="row-cell row-streaming">${streamingProvidersHtml(movie, { variant: "row" })}</div>
         ${visibleColumns.map((c) => listCellHtml(c, movie)).join("")}
       `;
       row.querySelector(".row-poster-slot").replaceWith(posterWrap);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "row-remove-btn";
-      removeBtn.title = "Remove from watchlist";
-      removeBtn.setAttribute("aria-label", "Remove from watchlist");
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeFromWatchlist(movie.id);
-      });
-      row.querySelector(".row-remove-slot").replaceWith(removeBtn);
 
       row.querySelectorAll(".row-streaming-icon").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
 
@@ -969,7 +971,7 @@
         e.preventDefault();
         e.stopPropagation();
         const key = handle.dataset.key;
-        const allDefs = [...LOCKED_LIST_COLUMNS, ...LIST_COLUMNS];
+        const allDefs = [...WATCHLIST_LOCKED_LIST_COLUMNS, ...WATCHLIST_LIST_COLUMNS];
         const def = allDefs.find((c) => c.key === key);
         const startX = e.clientX;
         const startWidth = state.listColumns.widths[key] || def.width;
@@ -993,9 +995,9 @@
     });
   }
 
-  function buildColumnsMenu() {
+  function buildColumnsMenu(columns) {
     const menu = el("columns-menu");
-    menu.innerHTML = LIST_COLUMNS.map(
+    menu.innerHTML = columns.map(
       (c) => `
       <label class="columns-menu-item">
         <input type="checkbox" data-key="${c.key}" ${state.listColumns.visible[c.key] ? "checked" : ""} />
@@ -1167,7 +1169,22 @@
         openEditModal(movie.id);
       });
     } else {
-      detailBody.querySelector("#detail-remove-watchlist-btn").addEventListener("click", () => removeFromWatchlist(movie.id));
+      const removeBtn = detailBody.querySelector("#detail-remove-watchlist-btn");
+      let confirming = false;
+      let confirmTimer = null;
+      removeBtn.addEventListener("click", () => {
+        if (!confirming) {
+          confirming = true;
+          removeBtn.textContent = "Click again to remove";
+          confirmTimer = setTimeout(() => {
+            confirming = false;
+            removeBtn.textContent = "Remove from watchlist";
+          }, 4000);
+          return;
+        }
+        clearTimeout(confirmTimer);
+        removeFromWatchlist(movie.id);
+      });
     }
   }
 
@@ -1496,8 +1513,11 @@
       .forEach((w) => fetchAndStoreStreamingProviders(w.id, w.tmdbId));
   }
 
+  // Confirmation is handled by the caller (a press-again-to-confirm button in
+  // the drawer) rather than window.confirm() — native confirm dialogs are
+  // suppressed in some embedded/automated browser contexts, which made this
+  // silently no-op there.
   async function removeFromWatchlist(id) {
-    if (!confirm("Remove this movie from your watchlist?")) return;
     const { error } = await window.supabaseClient.from("watchlist").delete().eq("id", id);
     if (error) {
       console.error(error);
@@ -1750,6 +1770,7 @@
     if (view === "watchlist") buildWatchlistFilterChips();
     else buildFilterChips();
     applyFilterPanelView(view);
+    buildColumnsMenu(view === "watchlist" ? WATCHLIST_LIST_COLUMNS : LIST_COLUMNS);
     el("add-movie-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
     render();
   }
@@ -1813,7 +1834,7 @@
       }
     });
 
-    buildColumnsMenu();
+    buildColumnsMenu(state.activeView === "watchlist" ? WATCHLIST_LIST_COLUMNS : LIST_COLUMNS);
     el("columns-toggle-btn").addEventListener("click", (e) => {
       e.stopPropagation();
       const menu = el("columns-menu");
