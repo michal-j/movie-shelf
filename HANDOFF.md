@@ -61,6 +61,9 @@ data/movies.json     — historical full export, NOT used by the running
 data/movies-demo.json — static 32-movie curated subset for the public demo.
                         Frozen snapshot, NOT connected to Supabase in any
                         way — see §3 for why this can go stale.
+data/watchlist-demo.json — same idea, for the demo's Watchlist tab: 14
+                        titles curated from the real watchlist (7
+                        streamable/7 not, plus one TV entry), frozen.
 scripts/*.py         — one-off data-pipeline scripts that originally built
                         data/movies.json from the user's My Movies XML +
                         CSV exports. Not part of the running app. Useful
@@ -163,26 +166,38 @@ since the Supabase migration:
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
-- **Watchlist** (added 2026-09-15, real app only, no demo support): a
-  second, fully independent list — a "Personal collection" / "Watchlist"
-  tab row sits between the header and the sort/filter toolbar. Backed by
-  its own Supabase table `public.watchlist` (see §5), not by a flag on
-  `movies` — owning a copy of something never removes it from the
-  watchlist. Adding works the same TMDB search-as-you-type flow as
-  Add-movie, minus the format step (watchlist items have no copies), but
-  it's **movie-only today**: the search box only resolves TMDB movies.
-  TV shows currently only get into the watchlist via a manual/bulk import
-  (see §5) — extending the live search to also find TV shows is
-  deferred, see §6.
+- **Watchlist** (added 2026-09-15): a second, fully independent list — a
+  "Personal collection" / "Watchlist" tab row sits between the header and
+  the sort/filter toolbar. Backed by its own Supabase table
+  `public.watchlist` (see §5), not by a flag on `movies` — owning a copy of
+  something never removes it from the watchlist. Adding works the same TMDB
+  search-as-you-type flow as Add-movie, minus the format step (watchlist
+  items have no copies), but it's **movie-only today**: the search box only
+  resolves TMDB movies. TV shows currently only get into the watchlist via
+  a manual/bulk import (see §5) — extending the live search to also find TV
+  shows is deferred, see §6. Adding a title that's already in the watchlist
+  (matched by IMDb ID) disables the confirm button with a "This is already
+  in your watchlist." notice instead of creating a duplicate row.
   Each watchlist item caches TMDB/JustWatch streaming availability for
   Poland: grid posters go grayscale+dimmed when nothing's streaming, list
-  view gets a resizable "Streaming" column, the detail drawer gets a
-  "Where to watch (PL)" section. Every provider icon on a given title
-  links to the *same* URL — TMDB's API has no per-provider deep link,
-  only one link per title/country. Removing an item is a
-  press-again-to-confirm button in the drawer (not `window.confirm()`,
-  which is silently suppressed in some embedded/automated browser
-  contexts and made this look broken during testing).
+  view gets a resizable "Streaming" column (in the Columns menu like any
+  other optional column), the detail drawer gets a "Where to watch (PL)"
+  section. Every provider icon on a given title links to the *same* URL —
+  TMDB's API has no per-provider deep link, only one link per
+  title/country. Removing an item is a press-again-to-confirm button in the
+  drawer — the same pattern the collection's Delete button (in the Edit
+  modal) now also uses, after `window.confirm()` turned out to be silently
+  suppressed in some embedded/automated browser contexts and made both
+  look broken during testing.
+  A TV row's Credits section shows "Creator" instead of "Director" (keyed
+  off `media_type === 'tv'`; collection rows have no `media_type` column at
+  all, so this only ever fires for watchlist TV entries).
+  **Demo mode supports the Watchlist tab too** (added 2026-09-16) —
+  `demo.html` mirrors `index.html`'s markup, backed by a frozen
+  `data/watchlist-demo.json` (14 titles, a 7/7 streamable split plus one TV
+  entry) with its own localStorage key (`movieShelf.demoWatchlist`). Add is
+  still fully inert in demo either way (no session, no live TMDB calls) —
+  same reasoning as Add-movie.
 
 ---
 
