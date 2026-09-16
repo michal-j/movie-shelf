@@ -163,6 +163,26 @@ since the Supabase migration:
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
+- **Watchlist** (added 2026-09-15, real app only, no demo support): a
+  second, fully independent list — a "Personal collection" / "Watchlist"
+  tab row sits between the header and the sort/filter toolbar. Backed by
+  its own Supabase table `public.watchlist` (see §5), not by a flag on
+  `movies` — owning a copy of something never removes it from the
+  watchlist. Adding works the same TMDB search-as-you-type flow as
+  Add-movie, minus the format step (watchlist items have no copies), but
+  it's **movie-only today**: the search box only resolves TMDB movies.
+  TV shows currently only get into the watchlist via a manual/bulk import
+  (see §5) — extending the live search to also find TV shows is
+  deferred, see §6.
+  Each watchlist item caches TMDB/JustWatch streaming availability for
+  Poland: grid posters go grayscale+dimmed when nothing's streaming, list
+  view gets a resizable "Streaming" column, the detail drawer gets a
+  "Where to watch (PL)" section. Every provider icon on a given title
+  links to the *same* URL — TMDB's API has no per-provider deep link,
+  only one link per title/country. Removing an item is a
+  press-again-to-confirm button in the drawer (not `window.confirm()`,
+  which is silently suppressed in some embedded/automated browser
+  contexts and made this look broken during testing).
 
 ---
 
@@ -220,6 +240,30 @@ releases of TV content, user said leave as-is, don't "fix" this. ~47 movies
 have no Metascore — legitimately absent on OMDb for those titles, not a
 data gap. Everything else was backfilled from OMDb already.
 
+**`public.watchlist`** (added 2026-09-15): same RLS pattern as `movies`
+(same hardcoded owner UUID), same TMDB-shaped columns minus everything
+copy/ownership-specific (`format`, `copies`, `watched`, etc.), plus:
+```sql
+media_type text not null default 'movie',  -- 'movie' | 'tv', check constraint
+streaming_pl jsonb not null default '[]',  -- [{id, name, logoPath}, ...]
+streaming_link text,                        -- one link per title/country
+streaming_fetched_at timestamptz
+```
+`media_type` exists so `api/watch-providers.js` and the client's refresh
+logic call the right TMDB endpoint family (`/movie/...` vs `/tv/...`) —
+added after a bulk import initially skipped two TV shows (*Lonesome Dove*,
+*Rose Red*) because the lookup only checked TMDB's `movie_results`. **Any
+future TMDB lookup/import code must check `tv_results` too and never skip
+a title just because it's not a movie** — ask before giving up on one that
+truly has no TMDB entry either way.
+`app.js`'s `SELECT_COLUMNS_WATCHLIST`/`CAMEL_TO_DB_COLUMN_WATCHLIST` mirror
+the pattern above for this table.
+
+111 movies were bulk-imported into the watchlist from IMDb-export CSVs the
+user dropped in `watchlist_exports/` (untracked, not part of the repo —
+don't expect that folder to still exist later), plus the 2 TV shows added
+by hand afterward.
+
 ---
 
 ## 6. Known deferred work / backlog (explicitly "later, not now")
@@ -246,6 +290,11 @@ In roughly the order the user raised them:
    redesign Edit without that conversation happening first.
 5. **`data/movies-demo.json` going stale** (§3) — known, not important per
    the user, no action needed unless asked.
+6. **TV show search in the Add-to-watchlist flow**: the live search box
+   only resolves TMDB movies today (see §4). TV shows currently only enter
+   the watchlist via manual/bulk import. Extending the search-as-you-type
+   flow (and its preview/confirm UI) to also find and add TV shows is
+   deferred. Not started.
 
 ---
 
