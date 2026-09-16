@@ -12,6 +12,7 @@
     listColumns: "movieShelf.listColumns",
     gridCols: "movieShelf.gridCols",
     demoMovies: "movieShelf.demoMovies",
+    demoWatchlist: "movieShelf.demoWatchlist",
     activeView: "movieShelf.activeView",
   };
 
@@ -144,9 +145,7 @@
     movies: [], // filtered+sorted view
     allWatchlist: [], // every row from the watchlist table
     watchlist: [], // filtered+sorted watchlist view
-    // Demo has no watchlist tab/DOM at all — ignore any "watchlist" value a
-    // real-app visit on the same origin may have left in localStorage.
-    activeView: DEMO_MODE ? "collection" : localStorage.getItem(STORAGE_KEYS.activeView) || "collection",
+    activeView: localStorage.getItem(STORAGE_KEYS.activeView) || "collection",
     viewMode: localStorage.getItem(STORAGE_KEYS.viewMode) || "grid",
     gridCols: (() => {
       const saved = parseInt(localStorage.getItem(STORAGE_KEYS.gridCols), 10);
@@ -216,6 +215,14 @@
         const res = await fetch("data/movies-demo.json");
         state.allMovies = await res.json();
       }
+
+      const savedWatchlist = loadJSON(STORAGE_KEYS.demoWatchlist, null);
+      if (savedWatchlist) {
+        state.allWatchlist = savedWatchlist;
+      } else {
+        const wlRes = await fetch("data/watchlist-demo.json");
+        state.allWatchlist = await wlRes.json();
+      }
     } else {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       if (!session) {
@@ -246,15 +253,11 @@
     }
 
     buildFilterChips();
-    if (!DEMO_MODE) buildWatchlistFilterChips();
+    buildWatchlistFilterChips();
     bindEvents();
     applyGridCols();
     setViewMode(state.viewMode, { skipSave: true });
-    if (DEMO_MODE) {
-      render();
-    } else {
-      switchView(state.activeView, { skipSave: true });
-    }
+    switchView(state.activeView, { skipSave: true });
 
     if (!DEMO_MODE) {
       window.supabaseClient.auth.onAuthStateChange((event) => {
@@ -268,6 +271,10 @@
   // state.allMovies so a refresh doesn't lose it. No-op in the real app.
   function saveDemoMovies() {
     if (DEMO_MODE) saveJSON(STORAGE_KEYS.demoMovies, state.allMovies);
+  }
+
+  function saveDemoWatchlist() {
+    if (DEMO_MODE) saveJSON(STORAGE_KEYS.demoWatchlist, state.allWatchlist);
   }
 
   function allMovies() {
@@ -1147,7 +1154,7 @@
           ${movie.director?.length || movie.writers?.length ? `<div class="detail-section">
             <h4>Credits</h4>
             <dl class="meta-table">
-              ${movie.director && movie.director.length ? `<dt>Director</dt><dd>${escapeHtml(movie.director.join(", "))}</dd>` : ""}
+              ${movie.director && movie.director.length ? `<dt>${movie.mediaType === "tv" ? "Creator" : "Director"}</dt><dd>${escapeHtml(movie.director.join(", "))}</dd>` : ""}
               ${movie.writers && movie.writers.length ? `<dt>Writers</dt><dd>${escapeHtml(movie.writers.join(", "))}</dd>` : ""}
             </dl>
           </div>` : ""}
@@ -1198,6 +1205,7 @@
   let searchDebounceTimer = null;
   let selectedMovie = null; // full merged TMDB+OMDb record for the movie about to be added
   let duplicateOfExisting = null; // set when selectedMovie's imdbId matches a movie already on the shelf
+  let isDuplicateInWatchlist = false; // set when selectedMovie's imdbId is already in the watchlist
   let addTarget = "collection"; // collection | watchlist — which list the add flow writes to
 
   // Same press-again-to-confirm pattern as the watchlist drawer's Remove
@@ -1254,6 +1262,7 @@
   function resetAddPanel() {
     selectedMovie = null;
     duplicateOfExisting = null;
+    isDuplicateInWatchlist = false;
     clearTimeout(searchDebounceTimer);
     el("search-query").value = "";
     el("search-results").hidden = true;
@@ -1340,7 +1349,7 @@
   function updateConfirmButtonLabel() {
     const btn = el("confirm-add-btn");
     if (addTarget === "watchlist") {
-      btn.textContent = "Add to watchlist";
+      btn.textContent = isDuplicateInWatchlist ? "Already in watchlist" : "Add to watchlist";
       return;
     }
     btn.textContent = duplicateOfExisting ? `Add ${el("add-format-select").value} copy` : "Add to shelf";
@@ -1348,11 +1357,16 @@
 
   function applySelectedMovie(data) {
     selectedMovie = data;
-    duplicateOfExisting =
-      addTarget === "watchlist" ? null : data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
+    if (addTarget === "watchlist") {
+      duplicateOfExisting = null;
+      isDuplicateInWatchlist = data.imdbId ? state.allWatchlist.some((w) => w.imdbId === data.imdbId) : false;
+    } else {
+      duplicateOfExisting = data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
+      isDuplicateInWatchlist = false;
+    }
     renderMoviePreview(data);
     setSearchStatus("");
-    el("confirm-add-btn").disabled = false;
+    el("confirm-add-btn").disabled = isDuplicateInWatchlist;
     updateConfirmButtonLabel();
   }
 
@@ -1371,6 +1385,7 @@
           ${data.imdbRating != null ? `<span class="pill gold">★ ${data.imdbRating.toFixed(1)} IMDb</span>` : ""}
         </div>
         ${duplicateOfExisting ? `<p class="duplicate-notice">You already own this — <strong>${escapeHtml(ownedFormatsList(duplicateOfExisting))}</strong>. Saving will add another copy, not a new entry.</p>` : ""}
+        ${isDuplicateInWatchlist ? `<p class="duplicate-notice">This is already in your watchlist.</p>` : ""}
         ${data.description ? `<p class="movie-preview-overview">${escapeHtml(data.description)}</p>` : ""}
         <div class="movie-preview-meta">
           ${(data.genres || []).length ? `<div><strong>Genres:</strong> ${escapeHtml(data.genres.join(", "))}</div>` : ""}
@@ -1383,6 +1398,7 @@
     el("search-again-btn").addEventListener("click", () => {
       selectedMovie = null;
       duplicateOfExisting = null;
+      isDuplicateInWatchlist = false;
       preview.hidden = true;
       preview.innerHTML = "";
       el("confirm-add-btn").disabled = true;
@@ -1439,6 +1455,7 @@
   el("add-format-select").addEventListener("change", updateConfirmButtonLabel);
 
   async function confirmAddToWatchlist() {
+    if (isDuplicateInWatchlist) return;
     const btn = el("confirm-add-btn");
     btn.textContent = "Adding…";
 
@@ -1534,6 +1551,16 @@
   // suppressed in some embedded/automated browser contexts, which made this
   // silently no-op there.
   async function removeFromWatchlist(id) {
+    if (DEMO_MODE) {
+      state.allWatchlist = state.allWatchlist.filter((m) => m.id !== id);
+      saveDemoWatchlist();
+      showToast("Removed from watchlist");
+      if (detailModalOpenId === id) closeDetailModal();
+      buildWatchlistFilterChips();
+      render();
+      return;
+    }
+
     const { error } = await window.supabaseClient.from("watchlist").delete().eq("id", id);
     if (error) {
       console.error(error);
@@ -1909,7 +1936,7 @@
       const addBtn = el("add-movie-btn");
       addBtn.classList.add("btn-inert");
       addBtn.setAttribute("aria-disabled", "true");
-      addBtn.title = "Not available in the demo — sign in to add movies";
+      addBtn.title = "Not available in the demo — sign in to add movies or watchlist items";
       // No click listener attached, so the button is functionally inert;
       // deliberately not using the disabled attribute since that also
       // suppresses the hover tooltip in most browsers.

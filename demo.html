@@ -29,10 +29,17 @@
 
     <button id="add-movie-btn" class="btn btn-primary">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Add movie
+      <span id="add-movie-btn-label">Add movie</span>
     </button>
   </div>
 </header>
+
+<div class="view-tabs">
+  <div class="view-tabs-inner center-wrap">
+    <button id="tab-collection" class="view-tab active" type="button">Personal collection</button>
+    <button id="tab-watchlist" class="view-tab" type="button">Watchlist</button>
+  </div>
+</div>
 
 <div class="toolbar">
   <div class="toolbar-inner center-wrap">
@@ -95,7 +102,7 @@
       <button id="filter-clear-btn" class="btn-text">Clear all</button>
     </div>
 
-    <div class="filter-group">
+    <div class="filter-group" data-view="collection">
       <span class="filter-group-label">Watched status</span>
       <div class="chip-row" id="filter-watched">
         <button class="chip" data-value="all">All</button>
@@ -104,7 +111,7 @@
       </div>
     </div>
 
-    <div class="filter-group">
+    <div class="filter-group" data-view="collection">
       <span class="filter-group-label">Format</span>
       <div class="chip-row" id="filter-format"></div>
     </div>
@@ -114,7 +121,7 @@
       <div class="chip-row" id="filter-decade"></div>
     </div>
 
-    <div class="filter-group">
+    <div class="filter-group" data-view="collection">
       <span class="filter-group-label">Copies</span>
       <div class="chip-row" id="filter-copies">
         <button class="chip" data-value="multi">Multiple copies</button>
@@ -131,6 +138,21 @@
       <div class="chip-row collapsible" id="filter-country"></div>
       <button id="filter-country-toggle" class="btn-text chip-toggle-btn" type="button" hidden>Show all</button>
     </div>
+
+    <div class="filter-group" data-view="watchlist">
+      <span class="filter-group-label">Streaming available</span>
+      <div class="chip-row" id="filter-streaming-available">
+        <button class="chip" data-value="all">All</button>
+        <button class="chip" data-value="yes">Yes</button>
+        <button class="chip" data-value="no">No</button>
+      </div>
+    </div>
+
+    <div class="filter-group" data-view="watchlist">
+      <span class="filter-group-label">Streaming service</span>
+      <div class="chip-row collapsible" id="filter-streaming-service"></div>
+      <button id="filter-streaming-service-toggle" class="btn-text chip-toggle-btn" type="button" hidden>Show all</button>
+    </div>
   </div>
 </aside>
 
@@ -140,6 +162,12 @@
   <div id="empty-state" class="empty-state" hidden>
     <p>No movies match your filters.</p>
     <button id="empty-clear-btn" class="btn btn-ghost">Clear filters</button>
+  </div>
+  <div id="watchlist-grid" class="movie-grid" hidden></div>
+  <div id="watchlist-list" class="movie-list" hidden></div>
+  <div id="watchlist-empty-state" class="empty-state" hidden>
+    <p>Your watchlist is empty.</p>
+    <button id="watchlist-empty-clear-btn" class="btn btn-ghost">Clear filters</button>
   </div>
 </main>
 
