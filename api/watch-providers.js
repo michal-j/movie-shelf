@@ -4,7 +4,7 @@
 // returns one link per country (to TMDB's own watch page), never a
 // per-provider deep link, so every provider on a title shares that one URL.
 //
-// GET /api/watch-providers?tmdbId=603
+// GET /api/watch-providers?tmdbId=603&mediaType=movie (mediaType: movie | tv, default movie)
 
 const SUPABASE_URL = "https://ybfxyrzkdexjjptuzzuy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_qI5PQ_DO9esWd9FPAFEbtQ_bcJkmUIN";
@@ -40,9 +40,10 @@ module.exports = async (req, res) => {
     res.status(400).json({ error: "Pass tmdbId" });
     return;
   }
+  const mediaType = req.query.mediaType === "tv" ? "tv" : "movie";
 
   try {
-    const url = new URL(`https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers`);
+    const url = new URL(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}/watch/providers`);
     url.searchParams.set("api_key", TMDB_API_KEY);
     const tmdbRes = await fetch(url);
     if (!tmdbRes.ok) throw new Error(`TMDB watch/providers failed: ${tmdbRes.status}`);

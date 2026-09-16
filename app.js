@@ -54,7 +54,7 @@
   // Watchlist rows share most of movies' shape but have no copies/format/watched,
   // plus cached TMDB/JustWatch streaming-availability columns of their own.
   const SELECT_COLUMNS_WATCHLIST = [
-    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "title",
+    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "mediaType:media_type", "title",
     "originalTitle:original_title", "originalLanguage:original_language", "year",
     "imdbRating:imdb_rating", "imdbVotes:imdb_votes", "metascore", "runtimeMinutes:runtime_minutes",
     "genres", "countries", "director", "writers", "cast:cast_members", "studios",
@@ -64,7 +64,7 @@
   ].join(", ");
 
   const CAMEL_TO_DB_COLUMN_WATCHLIST = {
-    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", title: "title",
+    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", mediaType: "media_type", title: "title",
     originalTitle: "original_title", originalLanguage: "original_language", year: "year",
     imdbRating: "imdb_rating", imdbVotes: "imdb_votes", metascore: "metascore",
     runtimeMinutes: "runtime_minutes", genres: "genres", countries: "countries",
@@ -1431,6 +1431,9 @@
 
     const newItem = {
       id: "wl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      // The app's own search/add flow only resolves movies on TMDB — TV
+      // shows currently only enter the watchlist via a manual/bulk import.
+      mediaType: "movie",
       title: selectedMovie.title,
       originalTitle: selectedMovie.originalTitle || selectedMovie.title,
       originalLanguage: selectedMovie.originalLanguage || null,
@@ -1470,13 +1473,13 @@
     buildWatchlistFilterChips();
     render();
 
-    if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId);
+    if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId, newItem.mediaType);
   }
 
-  async function fetchAndStoreStreamingProviders(id, tmdbId) {
+  async function fetchAndStoreStreamingProviders(id, tmdbId, mediaType) {
     try {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
-      const res = await fetch(`/api/watch-providers?tmdbId=${tmdbId}`, {
+      const res = await fetch(`/api/watch-providers?tmdbId=${tmdbId}&mediaType=${mediaType === "tv" ? "tv" : "movie"}`, {
         headers: { Authorization: `Bearer ${session?.access_token || ""}` },
       });
       const data = await res.json();
@@ -1510,7 +1513,7 @@
     const now = Date.now();
     state.allWatchlist
       .filter((w) => w.tmdbId && (!w.streamingFetchedAt || now - new Date(w.streamingFetchedAt).getTime() > STALE_MS))
-      .forEach((w) => fetchAndStoreStreamingProviders(w.id, w.tmdbId));
+      .forEach((w) => fetchAndStoreStreamingProviders(w.id, w.tmdbId, w.mediaType));
   }
 
   // Confirmation is handled by the caller (a press-again-to-confirm button in
