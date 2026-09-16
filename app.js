@@ -1200,11 +1200,23 @@
   let duplicateOfExisting = null; // set when selectedMovie's imdbId matches a movie already on the shelf
   let addTarget = "collection"; // collection | watchlist — which list the add flow writes to
 
+  // Same press-again-to-confirm pattern as the watchlist drawer's Remove
+  // button (see removeFromWatchlist) — not window.confirm(), which is
+  // silently suppressed in some embedded/automated browser contexts.
+  let deleteConfirming = false;
+  let deleteConfirmTimer = null;
+  function resetDeleteConfirm() {
+    clearTimeout(deleteConfirmTimer);
+    deleteConfirming = false;
+    deleteMovieBtn.textContent = "Delete";
+  }
+
   function openEditModal(id, target = "collection") {
     state.editingId = id || null;
     addTarget = id ? "collection" : target;
     editForm.reset();
     resetAddPanel();
+    resetDeleteConfirm();
     if (id) {
       const movie = getMovieById(id);
       editModalTitle.textContent = "Edit movie";
@@ -1236,6 +1248,7 @@
     editModal.hidden = true;
     state.editingId = null;
     resetAddPanel();
+    resetDeleteConfirm();
   }
 
   function resetAddPanel() {
@@ -1706,7 +1719,13 @@
 
   deleteMovieBtn.addEventListener("click", async () => {
     if (!state.editingId) return;
-    if (!confirm("Remove this movie from your shelf?")) return;
+    if (!deleteConfirming) {
+      deleteConfirming = true;
+      deleteMovieBtn.textContent = "Click again to delete";
+      deleteConfirmTimer = setTimeout(resetDeleteConfirm, 4000);
+      return;
+    }
+    resetDeleteConfirm();
 
     if (DEMO_MODE) {
       state.allMovies = state.allMovies.filter((m) => m.id !== state.editingId);
