@@ -85,10 +85,18 @@ and `demo.html` (public demo) load the exact same `app.js`. It reads
 demo.html, right before app.js loads) into a `DEMO_MODE` constant near the
 top of the file, and branches on it in exactly these places — nowhere else:
 
-- **`init()`**: real mode checks a Supabase session (redirects to
-  `login.html` if none) and queries the `movies` table; demo mode loads
+- **`init()`**: real mode checks a Supabase session (redirects to `/login`
+  if none) and queries the `movies` table; demo mode loads
   `data/movies-demo.json` once, or a previously-saved localStorage blob
   (`movieShelf.demoMovies`) if one exists from a prior visit.
+  **`index.html` hides `<body>` by default** (inline `<style>` in its
+  `<head>`) and `init()` only sets `document.body.style.visibility =
+  "visible"` once the session check confirms a session — added
+  2026-09-20 after a real bug: without it, a signed-out visitor to `/`
+  briefly saw the full (empty) app shell before being bounced to
+  `/login`, since the static HTML painted before the async session check
+  resolved. `demo.html` has no such gate (nothing to hide behind), so
+  `DEMO_MODE` never needs to reveal anything.
 - **Every write** (`toggleWatched`, edit-form submit, delete): real mode
   does a Supabase call; demo mode mutates `state.allMovies` directly and
   calls `saveDemoMovies()`, which just writes the whole array back to that
@@ -139,7 +147,7 @@ since the Supabase migration:
 - **Data layer**: Supabase Postgres (`movies` table, JSONB for array
   fields) instead of a static JSON file + localStorage. See §5.
 - **Auth**: single owner account, Supabase email/password. Real app
-  redirects to `login.html` if no session.
+  redirects to `/login` if no session (see the anti-flash note above §4).
 - **Add-movie flow** (real app only): type a title → live search-as-you-
   type against TMDB (debounced ~350ms, up to 5 results with poster/year) →
   click one (or paste an IMDb ID directly, which skips straight to a
@@ -340,6 +348,17 @@ Still deferred, in roughly the order the user raised them:
 
 ## 7. Environment / secrets / deployment gotchas
 
+- **Clean URLs** (added 2026-09-20): `vercel.json` sets `"cleanUrls": true`,
+  so `/login` and `/demo` serve `login.html`/`demo.html` in production
+  (and Vercel 308-redirects the `.html` version to the clean one). Every
+  internal link/redirect (`login.html`'s demo CTA, app.js's three
+  `/login` redirects) was updated to use the clean path directly rather
+  than relying on that redirect hop. The files on disk are still named
+  `login.html`/`demo.html`/`index.html` — only the URLs changed.
+  `scripts/serve.py` was taught to fall back to `<path>.html` for an
+  extensionless request too, so this is actually testable against the
+  local dev server, not just by trusting `vercel.json` and checking on a
+  real deployment.
 - **Vercel env vars**: `TMDB_API_KEY` and `OMDB_API_KEY`, set for all
   environments in the Vercel dashboard (Project Settings → Environment
   Variables). Required by both `/api` functions. **Gotcha we hit for
@@ -436,23 +455,28 @@ which is still plain `<script>` tags with zero bundling.
 - **Run them**: `npm install` once, then `npm test` (or `npm run
   test:watch`).
 - **Approach**: Vitest + jsdom, booting the *real* `app.js` / `login.js`
-  against the *real* `demo.html` / `login.html` markup (read from disk,
-  scripts stripped, executed manually — see `tests/helpers/bootApp.js` and
-  `bootLogin.js`) rather than re-implementing filtering/rendering logic as
-  separately-tested pure functions. `fetch` is stubbed to serve small,
+  against the *real* `demo.html` / `login.html` / `index.html` markup
+  (read from disk, scripts stripped, executed manually — see
+  `tests/helpers/bootApp.js`, `bootLogin.js`, `bootRealApp.js`) rather
+  than re-implementing filtering/rendering logic as separately-tested
+  pure functions. `DEMO_MODE` tests stub `fetch` to serve small,
   hand-written fixtures (`tests/fixtures/`) instead of the real (and
   slowly-changing) demo JSON, so tests don't churn every time someone
-  curates the demo dataset. The real Supabase-backed app/login paths
-  aren't exercised — only `DEMO_MODE` — since that needs no network/auth
-  mocking beyond `fetch` and a fake `window.supabaseClient`.
+  curates the demo dataset. The real (non-demo) `index.html` path is
+  exercised too, via `bootRealApp.js`'s fake `window.supabaseClient`
+  (`.auth.getSession`/`.onAuthStateChange`, `.from(table).select().order()`)
+  — no real network or Supabase project involved either way.
 - **Coverage**: filter panel open/close (button, outside-click, Escape),
   which filter groups show per tab (this is what would have caught the
   Decade-deleted-instead-of-moved mistake, see §8 and
   `filterPanel.test.js`'s regression test), Personal collection filtering
   (search/watched/format/copies/genre/country/decade, combined filters,
   Clear all, sorting), Watchlist filtering (genre/country/decade/streaming
-  available/streaming service, Clear all), and the login page's structure
-  plus its sign-in success/error handling.
+  available/streaming service, Clear all), the login page's structure and
+  its sign-in success/error handling, and the real app's auth gate
+  (`authGate.test.js` — the app shell stays hidden with no session, and
+  is revealed once one's confirmed; this is the regression test for the
+  flash-of-the-app-before-redirecting-to-login bug, see §4).
 - **Known gap**: CSS Grid geometry (§4's filter panel layout) isn't
   covered — jsdom doesn't run a real layout engine, so column positions
   and row-stretching can only be verified in an actual browser. Also not

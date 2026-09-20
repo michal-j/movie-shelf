@@ -21,7 +21,7 @@ describe("login page structure", () => {
   it("has a Try the demo card linking to demo.html", async () => {
     await bootLogin();
     const cta = document.querySelector(".login-demo-cta");
-    expect(cta.getAttribute("href")).toBe("demo.html");
+    expect(cta.getAttribute("href")).toBe("/demo");
   });
 
   it("checks for an existing session on load", async () => {

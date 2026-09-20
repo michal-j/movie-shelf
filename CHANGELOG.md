@@ -15,6 +15,9 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ### Changed
 
+- Real app and login page now use clean URLs (`/login`, `/demo`) instead
+  of `.html` extensions, via `vercel.json`'s `cleanUrls`. Internal links
+  and redirects updated to point at the clean paths directly.
 - Login page (`login.html`) rebuilt as a two-card layout (Sign in / Try
   the demo), restyled with the app's own dark palette instead of the
   layout it was modeled after.
@@ -35,3 +38,6 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 - Filter panel: a long expanded chip list (Country, Streaming service) no
   longer stretches every other group sharing its row.
+- Real app: a signed-out visitor no longer sees a flash of the (empty)
+  app shell before being redirected to the login page — `index.html`
+  hides itself until a session is confirmed.

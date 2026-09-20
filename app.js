@@ -226,9 +226,13 @@
     } else {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       if (!session) {
-        window.location.href = "login.html";
+        window.location.href = "/login";
         return;
       }
+      // Session confirmed — safe to reveal the shell index.html hides by
+      // default (see its inline <style>), whether the movies fetch below
+      // succeeds or not.
+      document.body.style.visibility = "visible";
 
       const { data, error } = await window.supabaseClient
         .from("movies")
@@ -261,7 +265,7 @@
 
     if (!DEMO_MODE) {
       window.supabaseClient.auth.onAuthStateChange((event) => {
-        if (event === "SIGNED_OUT") window.location.href = "login.html";
+        if (event === "SIGNED_OUT") window.location.href = "/login";
       });
       refreshStaleStreamingProviders();
     }
@@ -1959,7 +1963,7 @@
     if (signOutBtn) {
       signOutBtn.addEventListener("click", async () => {
         await window.supabaseClient.auth.signOut();
-        window.location.href = "login.html";
+        window.location.href = "/login";
       });
     }
 

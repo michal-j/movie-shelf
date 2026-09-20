@@ -20,6 +20,16 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Pragma", "no-cache")
         super().end_headers()
 
+    def send_head(self):
+        # Mirrors Vercel's cleanUrls (vercel.json) locally: /login should
+        # serve login.html the same way it does in production, so clean-URL
+        # links/redirects can actually be tested against this dev server
+        # instead of only against a real Vercel deployment.
+        path = self.translate_path(self.path)
+        if "." not in os.path.basename(path) and os.path.isfile(path + ".html"):
+            self.path += ".html"
+        return super().send_head()
+
 
 handler = functools.partial(NoCacheHandler, directory=ROOT)
 with http.server.ThreadingHTTPServer(("127.0.0.1", PORT), handler) as httpd:
