@@ -1896,6 +1896,11 @@
         menu.hidden = true;
         el("columns-toggle-btn").classList.remove("active");
       }
+      const toggleBtn = el("filter-toggle-btn");
+      if (!filterPanel.hidden && !filterPanel.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target)) {
+        filterPanel.hidden = true;
+        toggleBtn.classList.remove("active");
+      }
     });
 
     document.querySelectorAll("#filter-watched .chip").forEach((chip) => {
@@ -1971,6 +1976,10 @@
       if (e.key !== "Escape") return;
       if (!detailModal.hidden) closeDetailModal();
       if (!editModal.hidden) closeEditModal();
+      if (!filterPanel.hidden) {
+        filterPanel.hidden = true;
+        el("filter-toggle-btn").classList.remove("active");
+      }
     });
   }
 

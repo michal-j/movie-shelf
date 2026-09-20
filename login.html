@@ -7,41 +7,83 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="stylesheet" href="styles.css" />
 <style>
-  .login-wrap {
+  .login-page {
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 20px;
-  }
-  .login-card {
-    width: 100%;
-    max-width: 360px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 32px;
+    padding: 40px 20px;
+    background:
+      radial-gradient(circle at 12% 8%, var(--accent-dim), transparent 42%),
+      radial-gradient(circle at 88% 92%, var(--watched-dim), transparent 42%),
+      var(--bg);
   }
   .login-brand {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-weight: 700;
-    font-size: 18px;
-    margin-bottom: 24px;
-    color: var(--text);
-  }
-  .login-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    gap: 10px;
     margin-bottom: 16px;
   }
-  .login-field span { font-size: 13px; color: var(--text-dim); }
+  .login-brand svg { color: var(--accent); flex-shrink: 0; }
+  .login-brand-name {
+    font-weight: 800;
+    font-size: 40px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent) 15%, #f2879a 50%, var(--watched) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .login-tagline {
+    color: var(--text-dim);
+    font-size: 15px;
+    margin-bottom: 36px;
+    text-align: center;
+    max-width: 440px;
+  }
+  .login-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 760px;
+  }
+  @media (max-width: 680px) {
+    .login-cards { grid-template-columns: 1fr; }
+  }
+  .login-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 26px;
+    display: flex;
+    flex-direction: column;
+  }
+  .login-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .login-card-icon.accent { background: var(--accent-dim); color: var(--accent); }
+  .login-card-icon.watched { background: var(--watched-dim); color: var(--watched); }
+  .login-card h2 { font-size: 16.5px; font-weight: 700; margin: 0 0 4px; color: var(--text); }
+  .login-card-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 20px; line-height: 1.5; }
+  .login-field {
+    display: block;
+    margin-bottom: 14px;
+  }
+  .login-field span { display: block; font-size: 12.5px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
   .login-field input {
+    width: 100%;
+    box-sizing: border-box;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--text);
     padding: 10px 12px;
     font-size: 14px;
@@ -49,51 +91,114 @@
   .login-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .login-error {
     color: var(--accent);
-    font-size: 13px;
-    margin-bottom: 12px;
-    min-height: 18px;
+    font-size: 12.5px;
+    margin: 0 0 10px;
+    min-height: 16px;
   }
   .login-submit {
     width: 100%;
+    justify-content: center;
     margin-top: 4px;
   }
-  .login-demo-link {
-    text-align: center;
-    margin-top: 20px;
+  .login-demo-list {
+    list-style: none;
+    margin: 0 0 22px;
+    padding: 0;
     font-size: 13px;
     color: var(--text-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
   }
-  .login-demo-link a { color: var(--accent); text-decoration: none; }
-  .login-demo-link a:hover { text-decoration: underline; }
+  .login-demo-list li { display: flex; align-items: flex-start; gap: 8px; }
+  .login-demo-list li::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--watched);
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .login-demo-cta {
+    margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 0;
+    border-radius: 8px;
+    border: 1.5px solid var(--watched);
+    color: var(--watched);
+    background: transparent;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .login-demo-cta:hover { background: var(--watched); color: #fff; }
 </style>
 </head>
 <body>
 
-<div class="login-wrap">
-  <div class="login-card">
-    <div class="login-brand">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/>
-        <path d="M7 4V20M17 4V20" stroke="currentColor" stroke-width="1.6"/>
-        <path d="M2 9H7M2 15H7M17 9H22M17 15H22" stroke="currentColor" stroke-width="1.6"/>
-      </svg>
-      <span>Movie Shelf</span>
-    </div>
-    <form id="login-form">
-      <label class="login-field">
-        <span>Email</span>
-        <input type="email" name="email" autocomplete="username" required />
-      </label>
-      <label class="login-field">
-        <span>Password</span>
-        <input type="password" name="password" autocomplete="current-password" required />
-      </label>
-      <p id="login-error" class="login-error"></p>
-      <button type="submit" class="btn btn-primary login-submit">Sign in</button>
-    </form>
-    <p class="login-demo-link"><a href="demo.html">Or try the public demo →</a></p>
+<main class="login-page">
+  <div class="login-brand">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M7 4V20M17 4V20" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M2 9H7M2 15H7M17 9H22M17 15H22" stroke="currentColor" stroke-width="1.6"/>
+    </svg>
+    <span class="login-brand-name">Movie Shelf</span>
   </div>
-</div>
+  <p class="login-tagline">Your personal movie collection — track what you own, what you've watched, and what's next on the watchlist.</p>
+
+  <div class="login-cards">
+    <div class="login-card">
+      <div class="login-card-icon accent">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M8 11V7a4 4 0 1 1 8 0v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h2>Sign in</h2>
+      <p class="login-card-sub">Your collection, watched history, and watchlist.</p>
+
+      <form id="login-form">
+        <label class="login-field">
+          <span>Email</span>
+          <input type="email" name="email" autocomplete="username" required />
+        </label>
+        <label class="login-field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <p id="login-error" class="login-error"></p>
+        <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+      </form>
+    </div>
+
+    <div class="login-card">
+      <div class="login-card-icon watched">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M10 9l5 3-5 3V9z" fill="currentColor"/>
+        </svg>
+      </div>
+      <h2>Try the demo</h2>
+      <p class="login-card-sub">See the whole app, no sign-in required.</p>
+
+      <ul class="login-demo-list">
+        <li>Browse a curated sample collection</li>
+        <li>Filter, sort, and switch between grid and list views</li>
+        <li>Explore the Watchlist tab, with streaming availability</li>
+      </ul>
+
+      <a href="demo.html" class="login-demo-cta">Open the demo →</a>
+    </div>
+  </div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" integrity="sha384-iLddHTLokph6Omwoyid4XKxHaWa6w41BnoEj0q5oOrzmYPpHIKt1wyjReA7s//pP" crossorigin="anonymous"></script>
 <script src="supabaseClient.js"></script>
