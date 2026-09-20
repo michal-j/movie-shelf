@@ -1,0 +1,231 @@
+# Test cases
+
+Human-readable companion to the automated suite in `tests/*.test.js` (run
+with `npm test`). Each row below corresponds 1:1 to an `it(...)` in that
+suite — same name, same file — so if one starts failing, find it here for
+the plain-English version of what broke, or find it in the code for the
+exact assertion.
+
+All "Personal collection" cases use the fixture in `tests/fixtures/movies.js`
+(4 movies) and all "Watchlist" cases use `tests/fixtures/watchlist.js`
+(3 items) — a small, fixed dataset independent of the real app data, so
+these don't churn as the real collection grows. Everything here runs
+against the demo build of the app (`app.js` in `DEMO_MODE`) in a headless
+DOM, except the "Real app auth gate" section, which runs the real
+(non-demo) code path with a stubbed Supabase client.
+
+**Fixture reference:**
+
+| Personal collection | Year | Genres | Country | Format | Watched | Copies |
+|---|---|---|---|---|---|---|
+| The Prefect Storm | 1994 | Drama, Thriller | United States | Blu-ray | Yes | 1 |
+| Second Sight | 1994 | Sci-Fi | United Kingdom | DVD | No | 2 |
+| Third Wheel | 1987 | Comedy | France | DVD | No | 1 |
+| Fourth Wall | 2011 | Drama, Comedy | United States, France | Blu-ray | Yes | 1 |
+
+| Watchlist | Year | Genres | Country | Streaming |
+|---|---|---|---|---|
+| Awaiting Dawn | 2022 | Drama | United States | Netflix |
+| Backlog Blues | 1998 | Comedy | Germany | none |
+| Cue the Credits | 2005 | Drama, Thriller | United States, Germany | Apple TV Store |
+
+---
+
+## Filter panel open/close (`filterPanel.test.js`)
+
+### starts closed
+**Steps:** Load the app.
+**Expected:** The filter panel is hidden by default.
+
+### opens and closes via the Filters toggle button
+**Steps:** Click "Filters." Click "Filters" again.
+**Expected:** First click reveals the filter panel and marks the toggle
+button active. Second click hides the panel and un-marks the button.
+
+### closes when clicking outside the panel
+**Steps:** Click "Filters" to open the panel. Click anywhere in the movie
+grid (outside the panel).
+**Expected:** The panel closes and the toggle button is no longer active.
+
+### does not close when clicking inside the panel
+**Steps:** Click "Filters" to open the panel. Click inside the panel
+itself.
+**Expected:** The panel stays open.
+
+### closes on Escape
+**Steps:** Click "Filters" to open the panel. Press Escape.
+**Expected:** The panel closes and the toggle button is no longer active.
+
+## Filter panel groups shown per tab (`filterPanel.test.js`)
+
+### shows collection-only groups and hides watchlist-only groups on the Personal collection tab
+**Steps:** Load the app (Personal collection tab is the default).
+**Expected:** Watched status, Format, and Copies filter groups are
+visible. Streaming available and Streaming service groups are hidden.
+
+### keeps Decade, Genre and Country visible on the Personal collection tab
+**Steps:** Load the app.
+**Expected:** Decade, Genre, and Country filter groups are visible.
+
+### shows watchlist-only groups and hides collection-only groups on the Watchlist tab
+**Steps:** Switch to the Watchlist tab.
+**Expected:** Streaming available and Streaming service groups are
+visible. Watched status, Format, and Copies groups are hidden.
+
+### keeps Decade (and Genre/Country) visible and populated on the Watchlist tab too
+*(Regression test — Decade was once accidentally deleted from the
+Watchlist tab entirely instead of just being moved to a different spot
+in the filter grid.)*
+**Steps:** Switch to the Watchlist tab.
+**Expected:** Decade, Genre, and Country filter groups are visible, and
+the Decade group actually has chips in it (not just an empty container).
+
+---
+
+## Personal collection filtering (`collectionFiltering.test.js`)
+
+### renders all fixture movies on first load
+**Steps:** Load the app.
+**Expected:** Counter reads "4 movies"; the grid shows 4 movie cards.
+
+### filters by search text against the title
+**Steps:** Type "Second" into the search box.
+**Expected:** Counter reads "1 movie"; only "Second Sight" is shown.
+
+### filters by watched status
+**Steps:** Click the "Watched" chip. Then click the "Unwatched" chip.
+**Expected:** "Watched" shows 2 movies (The Prefect Storm, Fourth Wall).
+"Unwatched" shows 2 movies (Second Sight, Third Wheel).
+
+### filters by format
+**Steps:** Click the "DVD" format chip.
+**Expected:** Counter reads "2 movies": Second Sight, Third Wheel.
+
+### filters by multiple-copies
+**Steps:** Click the "Multiple copies" chip.
+**Expected:** Counter reads "1 movie": Second Sight (the only fixture
+movie with more than one copy).
+
+### filters by genre
+**Steps:** Click the "Comedy" genre chip.
+**Expected:** Counter reads "2 movies": Third Wheel, Fourth Wall.
+
+### filters by country
+**Steps:** Click the "France" country chip.
+**Expected:** Counter reads "2 movies": Third Wheel, Fourth Wall.
+
+### filters by decade
+**Steps:** Click the "1990s" decade chip. Click it again to toggle it
+off. Click the "1980s" decade chip.
+**Expected:** "1990s" shows 2 movies (The Prefect Storm, Second Sight,
+both 1994). After toggling off and picking "1980s," shows 1 movie
+(Third Wheel, 1987).
+
+### combines multiple active filters
+**Steps:** Click the "Drama" genre chip, then the "1990s" decade chip.
+**Expected:** Counter reads "1 movie": The Prefect Storm (Fourth Wall is
+Drama but not 1990s, so it's excluded).
+
+### resets every filter via Clear all
+**Steps:** Click "Drama" (genre), "1990s" (decade), and "Watched"
+(status) chips. Click "Clear all."
+**Expected:** Counter reads "4 movies" again and the Watched-status
+group's "All" chip is active again.
+
+### sorts by year, newest first
+**Steps:** Change the Sort dropdown to "Year (newest)."
+**Expected:** Cards appear in order: Fourth Wall (2011), The Prefect
+Storm (1994), Second Sight (1994, tie-broken alphabetically after "The
+Prefect Storm"), Third Wheel (1987).
+
+---
+
+## Watchlist filtering (`watchlistFiltering.test.js`)
+
+### renders all fixture watchlist items on switching tabs
+**Steps:** Switch to the Watchlist tab.
+**Expected:** Counter reads "3 movies"; the grid shows 3 cards.
+
+### filters by genre
+**Steps:** Click the "Drama" genre chip.
+**Expected:** Counter reads "2 movies": Awaiting Dawn, Cue the Credits.
+
+### filters by country
+**Steps:** Click the "Germany" country chip.
+**Expected:** Counter reads "2 movies": Backlog Blues, Cue the Credits.
+
+### filters by decade
+**Steps:** Click the "2020s" decade chip. Toggle it off, then click
+"1990s."
+**Expected:** "2020s" shows 1 movie (Awaiting Dawn, 2022). "1990s" shows
+1 movie (Backlog Blues, 1998).
+
+### filters by streaming availability
+**Steps:** Click "Yes" under Streaming available. Then click "No."
+**Expected:** "Yes" shows 2 movies (Awaiting Dawn, Cue the Credits —
+both have a streaming provider). "No" shows 1 movie (Backlog Blues, the
+only one with none).
+
+### filters by streaming service
+**Steps:** Click the "Netflix" streaming-service chip.
+**Expected:** Counter reads "1 movie": Awaiting Dawn.
+
+### resets every filter via Clear all
+**Steps:** Click "Drama" (genre) and "Yes" (streaming available). Click
+"Clear all."
+**Expected:** Counter reads "3 movies" again and the Streaming-available
+group's "All" chip is active again.
+
+---
+
+## Login page structure (`loginPage.test.js`)
+
+### has a Sign in card with the fields login.js binds to
+**Steps:** Load the login page.
+**Expected:** Email and password inputs exist, the error message area is
+empty, and the submit button reads "Sign in."
+
+### has a Try the demo card linking to demo.html
+**Steps:** Load the login page.
+**Expected:** The "Open the demo" button links to `/demo`.
+
+### checks for an existing session on load
+**Steps:** Load the login page.
+**Expected:** The page checks Supabase for an existing session exactly
+once (used to redirect an already-signed-in visitor straight into the
+app — see `login.js`).
+
+## Login form submission (`loginPage.test.js`)
+
+### shows an error and re-enables the button when sign-in fails
+**Steps:** Enter an email and an incorrect password. Submit the form
+(Supabase returns an error).
+**Expected:** Sign-in is attempted with exactly the entered
+email/password; the error message reads "Incorrect email or password.";
+the submit button is re-enabled and reads "Sign in" again (not stuck on
+"Signing in…").
+
+### calls signInWithPassword with the form's values on submit
+**Steps:** Enter an email and password. Submit the form (Supabase
+returns success).
+**Expected:** Sign-in is attempted with exactly the entered
+email/password. (What happens after a successful sign-in — the redirect
+to `/` — isn't checked here; see the note in `bootLogin.js`.)
+
+---
+
+## Real app auth gate (`authGate.test.js`)
+
+*(Regression tests for a real bug: a signed-out visitor briefly saw the
+full app shell before being redirected to the login page, because
+`index.html`'s markup painted before the async session check finished.)*
+
+### keeps the app hidden and does not reveal it when there is no session
+**Steps:** Load the real (non-demo) app with no Supabase session.
+**Expected:** The session is checked exactly once; the page body stays
+hidden (never flashes the app shell) before redirecting away.
+
+### reveals the app once a session is confirmed
+**Steps:** Load the real (non-demo) app with a valid Supabase session
+and a one-movie collection.
+**Expected:** The page body becomes visible.

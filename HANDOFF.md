@@ -454,6 +454,12 @@ which is still plain `<script>` tags with zero bundling.
 
 - **Run them**: `npm install` once, then `npm test` (or `npm run
   test:watch`).
+- **`tests/TEST_CASES.md`** (added 2026-09-21): human-readable companion,
+  one entry per `it(...)` (same name, same file) with plain-English
+  steps/expected result and the fixture data table it's testing against.
+  Keep it in sync when the automated cases change — it exists so someone
+  can see what's covered, or manually walk through a case, without
+  reading test code.
 - **Approach**: Vitest + jsdom, booting the *real* `app.js` / `login.js`
   against the *real* `demo.html` / `login.html` / `index.html` markup
   (read from disk, scripts stripped, executed manually — see

@@ -78,6 +78,11 @@ dev tooling only — it doesn't add a build step to the app itself, which
 stays plain `<script>` tags with no bundler. See `HANDOFF.md` §9 for what's
 covered and what isn't.
 
+[`tests/TEST_CASES.md`](tests/TEST_CASES.md) is the human-readable
+version — one entry per automated test (name, steps, expected result),
+for skimming what's covered or walking through a case by hand without
+reading test code.
+
 ## Project layout
 
 ```
