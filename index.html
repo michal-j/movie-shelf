@@ -6,6 +6,11 @@
 <title>Movie Shelf</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="stylesheet" href="styles.css" />
+<!-- Hides the app shell until app.js confirms a session, so a signed-out
+     visitor never sees a flash of the (empty) app before being redirected
+     to /login. Revealed by setting body.style.visibility directly, which
+     beats this rule on specificity — see init() in app.js. -->
+<style>body { visibility: hidden; }</style>
 </head>
 <body>
 
