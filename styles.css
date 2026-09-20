@@ -247,20 +247,43 @@ img { max-width: 100%; }
   border-bottom: 1px solid var(--border);
   padding: 16px 20px 18px;
 }
+/* Explicit 2-row, 4-column grid so groups line up into fixed columns
+   regardless of which are hidden for the active tab (collection vs.
+   watchlist swap a few groups in/out via [hidden] — see
+   applyFilterPanelView in app.js). Each group is pinned to a specific
+   cell rather than auto-flowing, for two reasons: (1) two groups can
+   grow very long (Country, Streaming service) and auto-flow would
+   stretch every group sharing their row to match, and (2) filters
+   shared between both tabs (Decade/Genre/Country) need to land in the
+   same spot in both views, which auto-flow can't guarantee once a
+   different number of groups are hidden. Collection-only and
+   watchlist-only groups that never appear together intentionally share
+   a cell (e.g. Watched status / Streaming available). */
 .filter-panel-inner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px 40px;
 }
 .filter-panel-header {
-  width: 100%;
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .filter-panel-header h3 { margin: 0; font-size: 14px; color: var(--text-dim); }
 
-.filter-group { display: flex; flex-direction: column; gap: 8px; min-width: 160px; }
+.filter-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.filter-group-watched, .filter-group-streaming-available { grid-column: 1; grid-row: 2; }
+.filter-group-decade { grid-column: 2; grid-row: 2; }
+.filter-group-format { grid-column: 3; grid-row: 2; }
+.filter-group-copies { grid-column: 4; grid-row: 2; }
+/* Watchlist-only: takes over Format's + Copies' cells (collection never
+   shows alongside it), spanning both for its longer provider list. */
+.filter-group-streaming-service { grid-column: 3 / 5; grid-row: 2; }
+.filter-group-genre { grid-column: 1 / 3; grid-row: 3; }
+.filter-group-country { grid-column: 3 / 5; grid-row: 3; }
 .filter-group-label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; max-width: 480px; }
@@ -848,4 +871,15 @@ main#content { padding: 20px; }
   .brand span { display: none; }
   main#content { padding: 12px; }
   .movie-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+
+  /* Below this width the 4-column filter grid gets too cramped — stack
+     every group full-width in DOM order instead of keeping the fixed
+     column/row assignments. */
+  .filter-panel-inner { grid-template-columns: 1fr; }
+  .filter-group-watched, .filter-group-format, .filter-group-decade,
+  .filter-group-copies, .filter-group-genre, .filter-group-country,
+  .filter-group-streaming-available, .filter-group-streaming-service {
+    grid-column: 1;
+    grid-row: auto;
+  }
 }
