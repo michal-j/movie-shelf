@@ -65,6 +65,19 @@ The two `/api` serverless functions (`movie-search`, `movie-lookup`,
 variables and only run on Vercel (locally, calls to `/api/*` will 404
 against the plain static server above).
 
+## Testing
+
+```bash
+npm install
+npm test
+```
+
+Runs the Vitest suite in `tests/` (jsdom), covering the filter panel, the
+Personal collection and Watchlist filtering, and the login page. This is
+dev tooling only — it doesn't add a build step to the app itself, which
+stays plain `<script>` tags with no bundler. See `HANDOFF.md` §9 for what's
+covered and what isn't.
+
 ## Project layout
 
 ```
@@ -75,6 +88,7 @@ styles.css                          — single shared stylesheet, dark theme
 api/                                — Vercel serverless functions (TMDB/OMDb proxies)
 data/                               — frozen JSON snapshots used only by the demo
 scripts/                            — local dev server + one-off data-pipeline scripts
+tests/                              — Vitest test suite (dev-only, see "Testing" above)
 ```
 
 ## License

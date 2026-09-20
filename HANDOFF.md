@@ -1,4 +1,4 @@
-# Movie Shelf — Handoff (current state, 2026-09-15)
+# Movie Shelf — Handoff (current state, 2026-09-20)
 
 This replaces the original migration-planning HANDOFF.md — that migration is
 done. This doc describes the app **as it actually is right now**, for a fresh
@@ -157,12 +157,38 @@ since the Supabase migration:
   by hand via SQL, this feature prevents new ones.
 - **"Multiple copies" filter**: a single boolean toggle chip in the filter
   panel (not a multi-option group — it's binary, so it didn't need one).
-  Sits in the filter panel's second row (after Decade, before Genre) —
-  putting it in the first row overflows the page's 1180px content column
-  once the real (not demo's shortened) decade/format lists are accounted
-  for. See the git commit "Fix filter panel bloat..." if you need to move
-  filter groups around again — retest against real data at realistic
-  widths, not the demo's shorter lists at an arbitrarily wide viewport.
+- **Filter panel layout (reworked 2026-09-20)**: `.filter-panel-inner` is an
+  explicit 4-column × 2-row CSS grid (`styles.css`), not flex-wrap or
+  auto-placed grid. Every `.filter-group-*` class gets a hardcoded
+  `grid-column`/`grid-row` — deliberately, for two reasons: (1) Country and
+  Streaming service can grow very long (expand-to-show-all), and auto-flow
+  would stretch every group sharing their row to match, which is exactly
+  the bug that motivated this rework; (2) filters shared between tabs
+  (Decade/Genre/Country) need to land in the identical cell in both views,
+  which isn't guaranteed once a different number of groups are hidden per
+  tab. Current layout:
+  - Row 1: Watched status, Decade, Format, Copies (Personal collection) /
+    Streaming available, Decade, Streaming service — spans 2 columns —
+    (Watchlist). Watched status/Streaming available share column 1;
+    Format/Copies' cells are reused by Streaming service's 2-column span,
+    since collection-only and watchlist-only groups never show together.
+  - Row 2 (both tabs): Genre (spans 2 cols), Country (spans 2 cols).
+  - Visibility per tab is still `data-view="collection"|"watchlist"` on
+    each `.filter-group`, toggled by `applyFilterPanelView()` in app.js —
+    unchanged mechanism, just now also determines which group "owns" a
+    shared grid cell.
+  - Below 640px the grid collapses to a single stacked column (see the
+    `@media (max-width: 640px)` override) — every explicit
+    `grid-column`/`grid-row` gets reset to flow naturally.
+  - **Gotcha**: CSS Grid geometry (pixel positions, which row stretches)
+    can't be verified by the automated test suite (§9) — jsdom doesn't run
+    a layout engine. Changes here still need a real-browser check, and
+    specifically re-test with a *long* expanded chip list (Country or
+    Streaming service, "Show all" clicked) — that's what exposed the
+    original auto-flow bug, a short/collapsed list won't reveal it.
+  - The filter panel also now closes on outside-click and Escape (`app.js`,
+    same `document`-level listener pattern as the columns menu), not just
+    the "Filters" toggle button.
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
@@ -283,29 +309,28 @@ by hand afterward.
 
 ## 6. Known deferred work / backlog (explicitly "later, not now")
 
-In roughly the order the user raised them:
+Done since this doc was last written (2026-09-20): filter panel grid
+alignment and click-outside/Escape-to-close (both below) — see §4's filter
+panel note and §9 for what replaced them. Login page was also reworked into
+a two-card (sign in / demo) layout, restyled with the app's own dark palette
+— see §4/login.html.
 
-1. **Filter panel grid alignment**: the panel uses flex-wrap, so groups
-   don't line up into clean columns on wide screens (ragged, not a strict
-   grid). A real fix likely means switching to CSS grid with fixed column
-   tracks. Not started.
-2. **Click-outside-to-close the filter panel**: currently only the
-   "Filters" toggle button opens/closes it. The modals already close on
-   backdrop click + Escape; the filter panel has neither. Not started.
-3. **Broader toast coverage**: toasts exist for add/edit/delete-movie and
+Still deferred, in roughly the order the user raised them:
+
+1. **Broader toast coverage**: toasts exist for add/edit/delete-movie and
    the duplicate-copy flow, but not everything — e.g. toggling watched
    status shows no success toast (only a failure one), clearing filters
    shows none. Needs the user to pin down exactly which actions should get
    one before building. Not started.
-4. **Reworking the Edit-existing-movie flow**: still the old manual form.
+2. **Reworking the Edit-existing-movie flow**: still the old manual form.
    The user wants to conceptualize a proper add/edit UI for per-copy
    format data (edition, distributor, aspect ratio, etc. — currently only
    settable by the original CSV import, not through the app UI at all) and
    said explicitly to defer touching Edit until that's designed. Don't
    redesign Edit without that conversation happening first.
-5. **`data/movies-demo.json` going stale** (§3) — known, not important per
+3. **`data/movies-demo.json` going stale** (§3) — known, not important per
    the user, no action needed unless asked.
-6. **TV show search in the Add-to-watchlist flow**: the live search box
+4. **TV show search in the Add-to-watchlist flow**: the live search box
    only resolves TMDB movies today (see §4). TV shows currently only enter
    the watchlist via manual/bulk import. Extending the search-as-you-type
    flow (and its preview/confirm UI) to also find and add TV shows is
@@ -328,11 +353,21 @@ In roughly the order the user raised them:
   the project, this is almost certainly why.
 - **Supabase anon/publishable key** in `supabaseClient.js` is meant to be
   public — RLS is the actual security boundary, not key secrecy.
-- **`preview_start` (the harness's dev-server launcher) fails in this
-  sandbox** with a `PermissionError`/`getcwd` error, unrelated to any app
-  code. Workaround: launch `python3 scripts/serve.py` as a plain background
-  Bash command, then use the browser tools' `navigate` against
-  `http://localhost:4173` directly.
+- **`preview_start` (the harness's Browser-pane dev-server launcher) fails
+  in this sandbox** with `python3: can't open file '.../scripts/serve.py':
+  Operation not permitted`. Confirmed cause (2026-09-20): the project lives
+  under `~/Documents`, one of macOS's TCC-protected folders — the Browser
+  pane's own subprocess launcher hasn't been granted consent to read into
+  it, even though the harness's Bash tool has. It's an OS permission gap
+  specific to that one launcher, not a code bug, and the user declining
+  Full Disk Access for the app is a reasonable call, not something to keep
+  pushing on. Workaround (works every time): launch
+  `python3 scripts/serve.py` yourself as a plain background Bash command
+  (or have the user run it in their own terminal — `npm run dev` does NOT
+  work here; `package.json` exists only for the test suite (§9), it defines
+  no dev-server script), then either use the browser tools' `navigate`
+  against `http://localhost:4173` directly, or have the user open Chrome
+  to it themselves.
 - **git push works directly from this sandbox** via the user's existing
   `osxkeychain` credential helper — no need to hand pushes back to the
   user unless something's actually broken.
@@ -345,7 +380,7 @@ In roughly the order the user raised them:
 
 ---
 
-## 8. Things learned the hard way this session (read before repeating them)
+## 8. Things learned the hard way (read before repeating them)
 
 - **Supabase bulk SQL via the MCP `execute_sql` tool**: batch generated SQL
   to roughly 12–20 rows / under ~30KB per call when rows contain long text
@@ -373,3 +408,55 @@ In roughly the order the user raised them:
   both made the row look roomier than it actually is on the real app.
   The page's content column is capped at `--content-max: 1180px`
   regardless of browser window width.
+- **(2026-09-20) Explicit CSS Grid placement needs an explicit row for
+  every child, including ones that "obviously" go first** — pinning the
+  filter groups to explicit `grid-column`/`grid-row` (see §4) but leaving
+  the `.filter-panel-header` on auto-placement pushed it to the *bottom*
+  of the panel: auto-placement only fills a row that still has a fully
+  free span for it, and both explicit rows were already full. Once one
+  grid child in a container gets explicit placement, audit whether any
+  sibling relying on auto-placement still lands where you expect.
+- **(2026-09-20) Vitest/Vite dynamic `import()` can't take a template
+  literal with a runtime variable** (e.g. `` import(`../app.js?t=${n}`) ``)
+  — Vite's static analysis rejects it at runtime with "Unknown variable
+  dynamic import", even though plain Node ESM allows it. To re-execute the
+  same script fresh in multiple tests in one file (needed here since
+  app.js/login.js run their whole boot sequence as an IIFE on import, with
+  no exports to call again), use `vi.resetModules()` before a *static*
+  `import("../app.js")` string instead of cache-busting the path.
+
+---
+
+## 9. Automated tests (added 2026-09-20)
+
+There was no test suite before this. `package.json` + `vitest.config.js`
+exist solely for this — they don't add a build step to the app itself,
+which is still plain `<script>` tags with zero bundling.
+
+- **Run them**: `npm install` once, then `npm test` (or `npm run
+  test:watch`).
+- **Approach**: Vitest + jsdom, booting the *real* `app.js` / `login.js`
+  against the *real* `demo.html` / `login.html` markup (read from disk,
+  scripts stripped, executed manually — see `tests/helpers/bootApp.js` and
+  `bootLogin.js`) rather than re-implementing filtering/rendering logic as
+  separately-tested pure functions. `fetch` is stubbed to serve small,
+  hand-written fixtures (`tests/fixtures/`) instead of the real (and
+  slowly-changing) demo JSON, so tests don't churn every time someone
+  curates the demo dataset. The real Supabase-backed app/login paths
+  aren't exercised — only `DEMO_MODE` — since that needs no network/auth
+  mocking beyond `fetch` and a fake `window.supabaseClient`.
+- **Coverage**: filter panel open/close (button, outside-click, Escape),
+  which filter groups show per tab (this is what would have caught the
+  Decade-deleted-instead-of-moved mistake, see §8 and
+  `filterPanel.test.js`'s regression test), Personal collection filtering
+  (search/watched/format/copies/genre/country/decade, combined filters,
+  Clear all, sorting), Watchlist filtering (genre/country/decade/streaming
+  available/streaming service, Clear all), and the login page's structure
+  plus its sign-in success/error handling.
+- **Known gap**: CSS Grid geometry (§4's filter panel layout) isn't
+  covered — jsdom doesn't run a real layout engine, so column positions
+  and row-stretching can only be verified in an actual browser. Also not
+  covered: the add-movie search/lookup flow, duplicate-copy merging, and
+  anything requiring a real Supabase call — all would need mocking
+  `window.supabaseClient` and the `/api/*` endpoints, which nothing here
+  does yet.
