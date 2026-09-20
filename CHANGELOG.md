@@ -7,6 +7,8 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ## [Unreleased]
 
+## [2026-09-20]
+
 ### Added
 
 - Automated test suite (Vitest + jsdom) covering the filter panel,
