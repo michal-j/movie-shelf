@@ -15,16 +15,32 @@ function bodyMarkup(htmlFileName) {
   return body.replace(/<script[\s\S]*?<\/script>/gi, "");
 }
 
+// jsdom doesn't implement matchMedia at all; app.js already tolerates that
+// (falls back to non-touch) but tests that want to exercise touch-only
+// behavior (e.g. the tap-to-preview card pattern) need a real stub.
+function stubMatchMedia(touch) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query) => ({
+      matches: query === "(hover: none)" && touch,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  );
+}
+
 /**
  * Boots app.js against demo.html's markup in jsdom, the same way demo.html
  * does in a real browser: MOVIE_SHELF_DEMO set before load, fetch serving
  * the two demo JSON files, no Supabase involved. Returns once the initial
  * render has completed.
  */
-export async function bootDemoApp({ movies = [], watchlist = [] } = {}) {
+export async function bootDemoApp({ movies = [], watchlist = [], touch = false } = {}) {
   document.body.innerHTML = bodyMarkup("demo.html");
   window.MOVIE_SHELF_DEMO = true;
   localStorage.clear();
+  stubMatchMedia(touch);
 
   vi.stubGlobal(
     "fetch",

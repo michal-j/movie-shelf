@@ -103,6 +103,7 @@ img { max-width: 100%; }
 .search-wrap:focus-within { border-color: var(--accent); color: var(--text-dim); }
 .search-wrap input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -159,6 +160,38 @@ img { max-width: 100%; }
   min-width: 16px;
   text-align: center;
 }
+
+/* ---------- Mobile menu (Add movie / Sign out, combined below 640px) ---------- */
+.mobile-menu-wrap { position: relative; display: none; }
+.mobile-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  min-width: 180px;
+  z-index: 30;
+}
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.mobile-menu-item:hover { background: var(--bg-card); }
 
 /* ---------- View tabs ---------- */
 .view-tabs {
@@ -437,7 +470,8 @@ main#content { padding: 20px; }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .movie-card:hover .card-overlay,
-.movie-card:focus-visible .card-overlay { opacity: 1; transform: translateY(0); }
+.movie-card:focus-visible .card-overlay,
+.movie-card.preview-active .card-overlay { opacity: 1; transform: translateY(0); }
 
 .card-title {
   font-size: 13.5px;
@@ -803,12 +837,30 @@ main#content { padding: 20px; }
 .movie-preview-poster {
   width: 90px;
   flex-shrink: 0;
+  /* Without this, the flex row's default align-items: stretch fights the
+     aspect-ratio below — the poster gets stretched to match however tall
+     the text column next to it is (which grows with a long overview/cast
+     list) and object-fit: cover then zooms/crops the image to fill that,
+     instead of a normal poster crop. */
+  align-self: flex-start;
   border-radius: 8px;
   overflow: hidden;
   aspect-ratio: 2/3;
   background: #20232b;
 }
 .movie-preview-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Landscape alternative to the portrait poster, used only below 640px (see
+   media query) — a narrow portrait thumbnail next to a long overview/cast
+   list reads badly on a phone, so mobile gets a wide backdrop image
+   stacked on top instead, same idea as the detail drawer's hero image. */
+.movie-preview-hero {
+  display: none;
+  width: 100%;
+  aspect-ratio: 16/9;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center 20%;
+}
 .movie-preview-info { min-width: 0; flex: 1; }
 .movie-preview-title { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
 .movie-preview-original { font-size: 12.5px; color: var(--text-faint); font-style: italic; margin: 0 0 8px; }
@@ -879,6 +931,10 @@ main#content { padding: 20px; }
      "Per row" slider has nothing to control — hide it rather than leave a
      control that moves but visibly does nothing. */
   #grid-cols-control { display: none; }
+  /* "Add movie"/"Add to watchlist" plus Sign out left too little room for
+     the search bar — combined into one hamburger menu below instead. */
+  #add-movie-btn, #sign-out-btn { display: none; }
+  .mobile-menu-wrap { display: block; }
 
   /* Below this width the 4-column filter grid gets too cramped — stack
      every group full-width in DOM order instead of keeping the fixed
@@ -890,4 +946,10 @@ main#content { padding: 20px; }
     grid-column: 1;
     grid-row: auto;
   }
+
+  /* Add-movie preview: swap the side-by-side portrait poster for a
+     stacked landscape hero image (see .movie-preview-hero above). */
+  .movie-preview { flex-direction: column; gap: 10px; }
+  .movie-preview-poster { display: none; }
+  .movie-preview-hero { display: block; }
 }

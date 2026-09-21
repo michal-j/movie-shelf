@@ -15,6 +15,20 @@ function fakeQuery(result) {
   return { select: () => ({ order: async () => result }) };
 }
 
+// jsdom doesn't implement matchMedia; app.js tolerates that (falls back to
+// non-touch) but stub it anyway for parity with bootApp.js.
+function stubMatchMedia(touch) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query) => ({
+      matches: query === "(hover: none)" && touch,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  );
+}
+
 /**
  * Boots app.js in real (non-demo) mode against index.html's markup, with a
  * fake supabaseClient instead of the real SDK/network. Mirrors what a
@@ -24,13 +38,14 @@ function fakeQuery(result) {
  * exists (prevents a flash of the empty app shell before redirecting a
  * signed-out visitor to /login).
  */
-export async function bootRealApp({ session = null, movies = [], watchlist = [] } = {}) {
+export async function bootRealApp({ session = null, movies = [], watchlist = [], touch = false } = {}) {
   document.body.innerHTML = bodyMarkup();
   const style = document.createElement("style");
   style.textContent = "body { visibility: hidden; }";
   document.head.appendChild(style);
 
   delete window.MOVIE_SHELF_DEMO;
+  stubMatchMedia(touch);
 
   const getSession = vi.fn(async () => ({ data: { session } }));
   const onAuthStateChange = vi.fn();

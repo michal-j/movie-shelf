@@ -7,6 +7,17 @@
   // Supabase call in this file must be behind a `!DEMO_MODE` branch.
   const DEMO_MODE = !!window.MOVIE_SHELF_DEMO;
 
+  // On touch devices (no real :hover), WebKit's "first tap simulates
+  // hover, second tap fires the click" behavior is inconsistent in
+  // practice — it depends on exactly what's under the finger, and could
+  // fire the card's click immediately, or fire it and then a delayed
+  // synthetic one that raced with the modal's own open/close state. Cards
+  // now implement the tap-to-preview/tap-again-to-open pattern explicitly
+  // (see bindCardOpen) instead of relying on that native quirk, so it's
+  // the same deliberate two-tap behavior everywhere, regardless of
+  // per-card content.
+  const TOUCH_DEVICE = typeof window.matchMedia === "function" && window.matchMedia("(hover: none)").matches;
+
   const STORAGE_KEYS = {
     viewMode: "movieShelf.viewMode",
     listColumns: "movieShelf.listColumns",
@@ -693,6 +704,33 @@
       .join("");
   }
 
+  // On touch, the first tap reveals the card's hover overlay (title/meta/
+  // scores) instead of opening the detail drawer immediately; a second tap
+  // on the same (now-previewing) card opens it. Tapping a different card
+  // just moves the preview there. Mouse/keyboard users are unaffected —
+  // real :hover already previews on desktop, so a click always opens.
+  let previewCard = null;
+  function clearCardPreview() {
+    if (previewCard) {
+      previewCard.classList.remove("preview-active");
+      previewCard = null;
+    }
+  }
+  function bindCardOpen(card, onOpen) {
+    card.addEventListener("click", () => {
+      if (!TOUCH_DEVICE || card.classList.contains("preview-active")) {
+        onOpen();
+        return;
+      }
+      clearCardPreview();
+      card.classList.add("preview-active");
+      previewCard = card;
+    });
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") onOpen();
+    });
+  }
+
   function renderGrid(movies) {
     grid.innerHTML = "";
     const frag = document.createDocumentFragment();
@@ -738,10 +776,7 @@
       `;
       card.appendChild(overlay);
 
-      card.addEventListener("click", () => openDetailModal(movie.id));
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") openDetailModal(movie.id);
-      });
+      bindCardOpen(card, () => openDetailModal(movie.id));
 
       frag.appendChild(card);
     });
@@ -783,10 +818,7 @@
       card.appendChild(overlay);
       overlay.querySelectorAll(".streaming-icon").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
 
-      card.addEventListener("click", () => openDetailModal(movie.id));
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") openDetailModal(movie.id);
-      });
+      bindCardOpen(card, () => openDetailModal(movie.id));
 
       frag.appendChild(card);
     });
@@ -1076,6 +1108,7 @@
 
   function closeDetailModal() {
     if (detailModal.hidden) return;
+    clearCardPreview();
     detailModal.classList.remove("open");
     const panel = detailModal.querySelector(".detail-modal");
     const finish = () => {
@@ -1384,8 +1417,10 @@
   function renderMoviePreview(data) {
     const preview = el("movie-preview");
     preview.hidden = false;
+    const heroImage = data.backdropUrl || data.posterUrl;
     preview.innerHTML = `
       <div class="movie-preview-poster">${data.posterUrl ? `<img src="${escapeHtml(data.posterUrl)}" alt="">` : ""}</div>
+      <div class="movie-preview-hero" style="${heroImage ? `background-image:url('${escapeHtml(heroImage)}')` : `background:${gradientFor(data.title)}`}"></div>
       <div class="movie-preview-info">
         <p class="movie-preview-title">${escapeHtml(data.title)}</p>
         ${data.originalTitle && data.originalTitle !== data.title ? `<p class="movie-preview-original">${escapeHtml(data.originalTitle)}</p>` : ""}
@@ -1845,6 +1880,7 @@
     applyFilterPanelView(view);
     buildColumnsMenu(view === "watchlist" ? WATCHLIST_LIST_COLUMNS : LIST_COLUMNS);
     el("add-movie-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
+    el("mobile-add-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
     render();
   }
 
@@ -1931,6 +1967,13 @@
         filterPanel.hidden = true;
         toggleBtn.classList.remove("active");
       }
+      if (previewCard && !previewCard.contains(e.target)) clearCardPreview();
+      const mobileMenu = el("mobile-menu");
+      const mobileMenuBtn = el("mobile-menu-btn");
+      if (!mobileMenu.hidden && !mobileMenu.contains(e.target) && e.target !== mobileMenuBtn && !mobileMenuBtn.contains(e.target)) {
+        mobileMenu.hidden = true;
+        mobileMenuBtn.classList.remove("active");
+      }
     });
 
     document.querySelectorAll("#filter-watched .chip").forEach((chip) => {
@@ -1967,16 +2010,34 @@
     const watchlistEmptyClearBtn = el("watchlist-empty-clear-btn");
     if (watchlistEmptyClearBtn) watchlistEmptyClearBtn.addEventListener("click", clearWatchlistFilters);
 
+    const mobileMenu = el("mobile-menu");
+    const mobileMenuBtn = el("mobile-menu-btn");
+    function closeMobileMenu() {
+      mobileMenu.hidden = true;
+      mobileMenuBtn.classList.remove("active");
+    }
+    mobileMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      mobileMenu.hidden = !mobileMenu.hidden;
+      mobileMenuBtn.classList.toggle("active", !mobileMenu.hidden);
+    });
+
     if (DEMO_MODE) {
-      const addBtn = el("add-movie-btn");
-      addBtn.classList.add("btn-inert");
-      addBtn.setAttribute("aria-disabled", "true");
-      addBtn.title = "Not available in the demo — sign in to add movies or watchlist items";
-      // No click listener attached, so the button is functionally inert;
-      // deliberately not using the disabled attribute since that also
-      // suppresses the hover tooltip in most browsers.
+      [el("add-movie-btn"), el("mobile-add-btn")].forEach((btn) => {
+        btn.classList.add("btn-inert");
+        btn.setAttribute("aria-disabled", "true");
+        btn.title = "Not available in the demo — sign in to add movies or watchlist items";
+        // No click listener attached, so the button is functionally inert;
+        // deliberately not using the disabled attribute since that also
+        // suppresses the hover tooltip in most browsers.
+      });
     } else {
-      el("add-movie-btn").addEventListener("click", () => openEditModal(null, state.activeView));
+      const openAdd = () => openEditModal(null, state.activeView);
+      el("add-movie-btn").addEventListener("click", openAdd);
+      el("mobile-add-btn").addEventListener("click", () => {
+        closeMobileMenu();
+        openAdd();
+      });
     }
     const tabCollectionBtn = el("tab-collection");
     const tabWatchlistBtn = el("tab-watchlist");
@@ -1987,9 +2048,14 @@
     el("home-btn").addEventListener("click", goHome);
     const signOutBtn = el("sign-out-btn");
     if (signOutBtn) {
-      signOutBtn.addEventListener("click", async () => {
+      const doSignOut = async () => {
         await window.supabaseClient.auth.signOut();
         window.location.href = "/login";
+      };
+      signOutBtn.addEventListener("click", doSignOut);
+      el("mobile-sign-out-btn").addEventListener("click", () => {
+        closeMobileMenu();
+        doSignOut();
       });
     }
 
