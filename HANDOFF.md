@@ -313,11 +313,12 @@ since the Supabase migration:
     `:hover` rules are now wrapped in `@media (hover: hover)`, so a
     touch device never sees a `:hover`-triggered style change at all —
     `.preview-active` (JS-driven) and `:focus-visible` (keyboard) are
-    the only overlay triggers left there, unconditional. This is also
-    the most likely fix for the drawer flash-open-then-close glitch,
-    which was still reproducible with round 2's incomplete fix — but
-    treat it the same way: very likely fixed, not confirmed, since it
-    was never reproduced outside a real device.
+    the only overlay triggers left there, unconditional. This also fixed
+    the drawer flash-open-then-close glitch, which was still
+    reproducible with round 2's incomplete fix — confirmed via
+    on-device retest (both this and the 3-tap issue), even though the
+    flash glitch itself was never directly reproduced outside a real
+    device to begin with.
   - **`.search-wrap input` needed its own `min-width: 0`** (not just
     `.search-wrap`, see round 1) — the `<input>`'s own intrinsic minimum
     width was overflowing its already-shrunk parent, which showed as
@@ -332,11 +333,14 @@ since the Supabase migration:
     `.modal-overlay` below 640px — generous, deliberately not tied to
     any specific toolbar height, plus `env(safe-area-inset-bottom)` for
     the iOS home-indicator area.
-  - **Severe, reproducible unresponsiveness / black screen** — see the
-    dedicated writeup in §6, it's substantial enough not to duplicate
-    here. Short version: `refreshStaleStreamingProviders()` was
-    completely unthrottled and is the most likely cause; now capped,
-    concurrency-limited, and debounced.
+  - **Severe, reproducible unresponsiveness / black screen, and a
+    separate "0 movies on manual reload" bug** — see the dedicated
+    writeup in §8, it's substantial enough not to duplicate here. Short
+    version: `refreshStaleStreamingProviders()` was completely
+    unthrottled (fixed, now capped/concurrency-limited/debounced) and
+    was a real bug, but turned out to be only a contributing factor —
+    the actual fix for the reload-specific symptom was
+    `queryWithEmptyRetry()`, confirmed via on-device retest.
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
@@ -461,7 +465,10 @@ Done since this doc was last written (2026-09-20): filter panel grid
 alignment and click-outside/Escape-to-close (both below) — see §4's filter
 panel note and §9 for what replaced them. Login page was also reworked into
 a two-card (sign in / demo) layout, restyled with the app's own dark palette
-— see §4/login.html.
+— see §4/login.html. A real-iPhone "0 movies on manual reload" bug (not
+in this list since it was a bug report, not a deferred feature) is also
+resolved — see §8's `queryWithEmptyRetry` entry if this class of bug
+looks like it's back.
 
 Still deferred, in roughly the order the user raised them:
 
@@ -483,59 +490,6 @@ Still deferred, in roughly the order the user raised them:
    the watchlist via manual/bulk import. Extending the search-as-you-type
    flow (and its preview/confirm UI) to also find and add TV shows is
    deferred. Not started.
-
-**⚠️ Real-iPhone "0 movies" report — still open, now narrowed to manual
-reload specifically. Two mitigations shipped (2026-09-21), root cause
-still not confirmed.**
-
-Timeline:
-1. First report: Personal collection briefly showed 0 movies,
-   self-recovered after a minute or two, couldn't be reproduced.
-2. Second report (more serious): 0 movies again after normal use, then a
-   manual reload produced a **black screen for ~2 minutes**, not caused
-   by backgrounding or a flaky network. Prime suspect at the time:
-   `refreshStaleStreamingProviders()` (§4/§9) fired one `fetch` + one
-   Supabase write **per stale watchlist item, completely unthrottled**,
-   on every real-app load — a large watchlist with a meaningful chunk
-   stale (>24h) means dozens of concurrent requests on every load, which
-   would explain consistent reproduction and a reload making it worse
-   (re-triggering the same burst). Fixed: capped at 20 items/load,
-   concurrency-limited to 4, oldest-stale-first, debounced re-rendering
-   (`streamingRefreshThrottle.test.js`, §9).
-3. **After that shipped, the user confirmed 0 movies on manual reload
-   still happens — "I think now that this always happened on a manual
-   reload."** So the streaming-refresh burst was at most a contributing
-   factor (worth having fixed regardless — it's a real bug — but not the
-   whole story), and the *specifically-on-reload* pattern is the more
-   important clue than "consistently reproducible" was. A manual reload
-   re-runs `init()`'s whole Supabase bootstrapping from zero: a fresh
-   client reads the persisted session from `localStorage`, and if the
-   access token needs refreshing, `getSession()` is supposed to await
-   that before returning — but a query can still come back
-   *successfully* empty (RLS matching zero rows) rather than erroring if
-   there's any timing gap here, which is consistent with the symptom
-   (no error anywhere, just 0 movies).
-
-Second mitigation, since the exact mechanism still isn't confirmed:
-`queryWithEmptyRetry()` in `app.js` treats a successful-but-empty movies
-or watchlist query as suspicious right after load, and retries once
-after re-checking the session (via a fresh `getSession()`, which
-refreshes the token if needed) and a short delay. Self-healing
-regardless of the exact cause — a genuinely empty collection just comes
-back empty again on the retry, at the cost of one extra query and
-~800ms. See `emptyResultRetry.test.js` (§9).
-
-**Still not confirmed as fully closed.** If 0-movies-on-reload still
-happens after this: does a *second* manual reload right after the first
-fix it (would suggest the retry's 800ms delay isn't long enough, or the
-race is specific to a cold client), and — if you have a Mac — Safari's
-remote Web Inspector (Settings → Safari → Advanced → Web Inspector on
-the phone, then Develop menu on the Mac) would give a real console/
-network trace, which is the only way to fully close this out. Worth
-checking `console.error` output specifically for anything logged by
-`queryWithEmptyRetry`'s caller — right now a persistent failure after
-the retry falls through to the normal empty-collection UI with nothing
-logged, which would be a good next addition if this keeps happening.
 
 ---
 
@@ -655,6 +609,29 @@ logged, which would be a good next addition if this keeps happening.
   app.js/login.js run their whole boot sequence as an IIFE on import, with
   no exports to call again), use `vi.resetModules()` before a *static*
   `import("../app.js")` string instead of cache-busting the path.
+- **(2026-09-21) `getSession()` succeeding is not the same as the
+  session actually being valid for the query that follows.** Real bug:
+  the real app's movies/watchlist queries would occasionally come back
+  *successfully* empty (`data: [], error: null`) right after a manual
+  page reload — no error anywhere, RLS just silently matched zero rows.
+  Never got a confirmed root cause (best theory: a timing gap around
+  Supabase's session/token refresh on a cold client init — a fresh
+  reload re-runs the whole bootstrapping sequence from scratch, unlike
+  navigating within an already-running SPA), but confirmed fixed via
+  on-device retest after adding `queryWithEmptyRetry()`: treat a
+  successful-but-empty result right after load as suspicious, re-check
+  the session, and retry once before trusting it — self-healing
+  regardless of the exact mechanism, since a genuinely empty
+  collection/watchlist just comes back empty again. **If empty-but-
+  shouldn't-be-empty results show up anywhere else this app talks to
+  Supabase, this is the pattern to reach for** — see
+  `queryWithEmptyRetry` in `app.js` and `emptyResultRetry.test.js`
+  (§9) — rather than assuming a fresh bug and re-diagnosing from
+  scratch. Also: don't trust "this always happens on X" from a single
+  session of manual testing as the full picture — the first two reports
+  pointed at backgrounding/network/an unrelated unthrottled-request bug
+  (which was real and worth fixing) before a third, more specific report
+  ("always on manual reload") actually narrowed it down.
 
 ---
 
@@ -702,7 +679,7 @@ which is still plain `<script>` tags with zero bundling.
   cap/concurrency-limit/ordering on the stale streaming-provider refresh
   (`streamingRefreshThrottle.test.js`), and the empty-query retry
   (`emptyResultRetry.test.js`) — both regression tests for a bug severe
-  enough to make the app unusable, see §6, and both using
+  enough to make the app unusable, see §8, and both using
   `bootRealApp.js`'s call-count-aware mock support
   (`movies`/`watchlist` can be a function of call index, not just a
   static array).

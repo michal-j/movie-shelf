@@ -7,18 +7,6 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ## [Unreleased]
 
-### Fixed
-
-- **Real iPhone: manual reload of the real app consistently showed 0
-  movies**, nothing visibly broken. Root cause still not confirmed —
-  best working theory is a transient race with Supabase's session/token
-  refresh on a cold client init, where a query can come back
-  successfully empty (RLS matching zero rows) rather than erroring.
-  Mitigation: an empty-but-successful movies/watchlist query right after
-  load is now treated as suspicious and retried once, after re-checking
-  the session. Self-healing regardless of the exact cause. See
-  `HANDOFF.md` §6 — needs on-device retest, not closed out yet.
-
 ## [2026-09-21]
 
 ### Added
@@ -70,7 +58,17 @@ starts from 2026-09-20 — earlier history lives in `git log` and
   one Supabase write per item, completely unthrottled, on every
   real-app load. Now capped at 20 items/load, concurrency-limited to 4,
   oldest-stale-first, with debounced re-rendering. (Turned out not to be
-  the whole story — see the empty-query-retry fix under `[Unreleased]`.)
+  the whole story — see the next entry.)
+- **Real iPhone: manual reload of the real app consistently showed 0
+  movies**, nothing visibly broken — confirmed fixed after an on-device
+  retest. Root cause was never directly confirmed; best working theory
+  is a transient race with Supabase's session/token refresh on a cold
+  client init, where a query can come back successfully empty (RLS
+  matching zero rows) rather than erroring. Mitigation: an
+  empty-but-successful movies/watchlist query right after load is now
+  treated as suspicious and retried once, after re-checking the
+  session — self-healing regardless of the exact cause. See
+  `HANDOFF.md` §8.
 - Movie cards on touch devices needed a 3rd tap to open the drawer
   (regression from the tap-to-preview change above): the original
   `:hover` CSS rules were still active on touch devices alongside the
