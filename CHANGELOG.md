@@ -9,26 +9,15 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ### Fixed
 
-- **Severe, reproducible mobile unresponsiveness (black screen for
-  minutes at a time)** — likely root cause: refreshing cached streaming
-  availability for stale watchlist items fired one `fetch` + one
-  Supabase write per item, completely unthrottled, on every real-app
-  load. Now capped at 20 items/load, concurrency-limited to 4, oldest-
-  stale-first, with debounced re-rendering. See `HANDOFF.md` §6 — not
-  independently confirmed against a real large watchlist, needs
-  on-device retest.
-- Movie cards on touch devices needed a 3rd tap to open the drawer
-  (regression from the previous tap-to-preview fix below): the original
-  `:hover` CSS rules were still active on touch devices alongside the
-  new tap-to-preview state, so WebKit's native hover-tap quirk and the
-  deliberate two-tap logic were stacking. Both `:hover` rules are now
-  scoped to `@media (hover: hover)` (real pointer devices only). Also
-  the most likely fix for the flash-open-then-close drawer glitch, which
-  was still reproducible before this — not independently confirmed.
-- Add-movie/Edit modal: Cancel/Save (or Cancel/Add to shelf) buttons no
-  longer hidden behind mobile Chrome's bottom toolbar — `overflow-y:
-  auto` alone doesn't help when the toolbar covers part of the visible
-  viewport without the layout viewport shrinking to match.
+- **Real iPhone: manual reload of the real app consistently showed 0
+  movies**, nothing visibly broken. Root cause still not confirmed —
+  best working theory is a transient race with Supabase's session/token
+  refresh on a cold client init, where a query can come back
+  successfully empty (RLS matching zero rows) rather than erroring.
+  Mitigation: an empty-but-successful movies/watchlist query right after
+  load is now treated as suspicious and retried once, after re-checking
+  the session. Self-healing regardless of the exact cause. See
+  `HANDOFF.md` §6 — needs on-device retest, not closed out yet.
 
 ## [2026-09-21]
 
@@ -39,7 +28,8 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 - Responsive breakpoint pass (tablet + mobile) across the whole app, not
   just the pages already covered — see Fixed below for what it caught.
 - `tests/cardPreview.test.js`, `tests/mobileMenu.test.js`,
-  `tests/gridColumns.test.js`, `tests/streamingRefreshThrottle.test.js`.
+  `tests/gridColumns.test.js`, `tests/streamingRefreshThrottle.test.js`,
+  `tests/emptyResultRetry.test.js`.
 
 ### Changed
 
@@ -74,6 +64,25 @@ starts from 2026-09-20 — earlier history lives in `git log` and
   CommonJS `/api/*` serverless functions, which then crashed on every
   request. Removed; the test suite doesn't need it. See `HANDOFF.md` §8
   — this must not be re-added without accounting for `/api`.
+- **Severe, reproducible mobile unresponsiveness (black screen for
+  minutes at a time)** — contributing factor: refreshing cached
+  streaming availability for stale watchlist items fired one `fetch` +
+  one Supabase write per item, completely unthrottled, on every
+  real-app load. Now capped at 20 items/load, concurrency-limited to 4,
+  oldest-stale-first, with debounced re-rendering. (Turned out not to be
+  the whole story — see the empty-query-retry fix under `[Unreleased]`.)
+- Movie cards on touch devices needed a 3rd tap to open the drawer
+  (regression from the tap-to-preview change above): the original
+  `:hover` CSS rules were still active on touch devices alongside the
+  new tap-to-preview state, so WebKit's native hover-tap quirk and the
+  deliberate two-tap logic were stacking. Both `:hover` rules are now
+  scoped to `@media (hover: hover)` (real pointer devices only). Also
+  fixed the flash-open-then-close drawer glitch, which was still
+  reproducible before this.
+- Add-movie/Edit modal: Cancel/Save (or Cancel/Add to shelf) buttons no
+  longer hidden behind mobile Chrome's bottom toolbar — `overflow-y:
+  auto` alone doesn't help when the toolbar covers part of the visible
+  viewport without the layout viewport shrinking to match.
 - Topbar: the "Add movie"/"Add to watchlist" button no longer gets
   clipped off the right edge on narrow screens (the search bar wasn't
   shrinking to make room), which was also the reason modals could

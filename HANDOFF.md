@@ -484,49 +484,58 @@ Still deferred, in roughly the order the user raised them:
    flow (and its preview/confirm UI) to also find and add TV shows is
    deferred. Not started.
 
-**⚠️ Real-iPhone unresponsiveness report — likely root cause found and
-fixed (2026-09-21), needs on-device confirmation before calling it
-closed.** First report: Personal collection briefly showed 0 movies,
-self-recovered after a minute or two, couldn't be reproduced. Second
-report (more serious, consistently reproducible): 0 movies again after
-normal use, then a manual reload produced a **black screen for ~2
-minutes** — not caused by backgrounding or a flaky network, and a manual
-reload did not resolve it faster. That second report pointed straight
-at `refreshStaleStreamingProviders()` (§4/§9): it used to fire one
-`fetch` + one Supabase write **per stale watchlist item, completely
-unthrottled**, unconditionally on every real-app load. A large watchlist
-with a meaningful chunk stale (>24h) means dozens of concurrent requests
-from a single mobile connection on *every* load — which would explain
-all of it: consistent reproduction (fires every load), a reload making
-it worse-or-same rather than better (the reload just re-triggers the
-same burst), and severe unresponsiveness (dozens of full watchlist
-re-renders landing in a tight window, on top of the network burst
-itself). It also composes badly with the auth-gate fix
-(`body { visibility: hidden }` until a session is confirmed, §4): if
-`init()` is still busy (or the main thread is busy from this burst) by
-the time a *reload* happens, the user sees a solid black screen for
-however long that takes, instead of at least the old flash-of-empty-
-shell — which matches the black-screen report exactly.
+**⚠️ Real-iPhone "0 movies" report — still open, now narrowed to manual
+reload specifically. Two mitigations shipped (2026-09-21), root cause
+still not confirmed.**
 
-Fixed: capped at 20 items per load, concurrency-limited to 4 in flight,
-oldest-stale-first (so a capped run still makes real progress on a large
-backlog across sessions), and the per-completion
-`buildWatchlistFilterChips()` + `render()` calls are now debounced
-(300ms) so a batch landing close together collapses into one re-render
-instead of one per item. See `fetchAndStoreStreamingProviders` /
-`refreshStaleStreamingProviders` in `app.js`, and
-`streamingRefreshThrottle.test.js` (§9) — confirmed the test fails
-without the concurrency limiting specifically, not just the cap.
+Timeline:
+1. First report: Personal collection briefly showed 0 movies,
+   self-recovered after a minute or two, couldn't be reproduced.
+2. Second report (more serious): 0 movies again after normal use, then a
+   manual reload produced a **black screen for ~2 minutes**, not caused
+   by backgrounding or a flaky network. Prime suspect at the time:
+   `refreshStaleStreamingProviders()` (§4/§9) fired one `fetch` + one
+   Supabase write **per stale watchlist item, completely unthrottled**,
+   on every real-app load — a large watchlist with a meaningful chunk
+   stale (>24h) means dozens of concurrent requests on every load, which
+   would explain consistent reproduction and a reload making it worse
+   (re-triggering the same burst). Fixed: capped at 20 items/load,
+   concurrency-limited to 4, oldest-stale-first, debounced re-rendering
+   (`streamingRefreshThrottle.test.js`, §9).
+3. **After that shipped, the user confirmed 0 movies on manual reload
+   still happens — "I think now that this always happened on a manual
+   reload."** So the streaming-refresh burst was at most a contributing
+   factor (worth having fixed regardless — it's a real bug — but not the
+   whole story), and the *specifically-on-reload* pattern is the more
+   important clue than "consistently reproducible" was. A manual reload
+   re-runs `init()`'s whole Supabase bootstrapping from zero: a fresh
+   client reads the persisted session from `localStorage`, and if the
+   access token needs refreshing, `getSession()` is supposed to await
+   that before returning — but a query can still come back
+   *successfully* empty (RLS matching zero rows) rather than erroring if
+   there's any timing gap here, which is consistent with the symptom
+   (no error anywhere, just 0 movies).
 
-**Not fully confirmed** — this is the most plausible mechanism found,
-not a reproduced-and-fixed bug in the traditional sense (nothing here
-runs against a real Supabase project with a large real watchlist). If
-the 0-movies/unresponsiveness/black-screen symptoms recur after this
-ships, useful info: does it still happen on a fresh sign-in (rules out
-a large stale backlog specifically), and — if you have a Mac — Safari's
+Second mitigation, since the exact mechanism still isn't confirmed:
+`queryWithEmptyRetry()` in `app.js` treats a successful-but-empty movies
+or watchlist query as suspicious right after load, and retries once
+after re-checking the session (via a fresh `getSession()`, which
+refreshes the token if needed) and a short delay. Self-healing
+regardless of the exact cause — a genuinely empty collection just comes
+back empty again on the retry, at the cost of one extra query and
+~800ms. See `emptyResultRetry.test.js` (§9).
+
+**Still not confirmed as fully closed.** If 0-movies-on-reload still
+happens after this: does a *second* manual reload right after the first
+fix it (would suggest the retry's 800ms delay isn't long enough, or the
+race is specific to a cold client), and — if you have a Mac — Safari's
 remote Web Inspector (Settings → Safari → Advanced → Web Inspector on
 the phone, then Develop menu on the Mac) would give a real console/
-network trace, which is the only way to fully close this out.
+network trace, which is the only way to fully close this out. Worth
+checking `console.error` output specifically for anything logged by
+`queryWithEmptyRetry`'s caller — right now a persistent failure after
+the retry falls through to the normal empty-collection UI with nothing
+logged, which would be a good next addition if this keeps happening.
 
 ---
 
@@ -691,8 +700,12 @@ which is still plain `<script>` tags with zero bundling.
   (`cardPreview.test.js`), the mobile hamburger menu
   (`mobileMenu.test.js`, both `DEMO_MODE` and real-app boots), and the
   cap/concurrency-limit/ordering on the stale streaming-provider refresh
-  (`streamingRefreshThrottle.test.js` — the one regression test in this
-  suite for a bug severe enough to make the app unusable, see §6).
+  (`streamingRefreshThrottle.test.js`), and the empty-query retry
+  (`emptyResultRetry.test.js`) — both regression tests for a bug severe
+  enough to make the app unusable, see §6, and both using
+  `bootRealApp.js`'s call-count-aware mock support
+  (`movies`/`watchlist` can be a function of call index, not just a
+  static array).
 - **Known gap**: CSS Grid geometry (§4's filter panel layout) isn't
   covered — jsdom doesn't run a real layout engine, so column positions
   and row-stretching can only be verified in an actual browser. Also not

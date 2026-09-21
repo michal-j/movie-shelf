@@ -342,3 +342,31 @@ ones. The 5 least-urgent stale items and all 5 fresh items are never
 touched. (Verified this test actually catches the bug: reverting just
 the concurrency-limiting logic while keeping the cap makes it fail with
 20 requests in flight simultaneously instead of ≤4.)
+
+---
+
+## Empty query results are retried once before being trusted (`emptyResultRetry.test.js`)
+
+*(Regression tests for a reported real bug: a manual reload of the real
+app consistently showed 0 movies, with nothing visibly broken. A query
+can succeed with zero rows due to a transient auth-context race — e.g.
+an access token mid-refresh — which RLS turns into an empty-but-
+successful result, not an error. `queryWithEmptyRetry` in app.js treats
+an empty result as suspicious right after load and retries once after
+re-checking the session.)*
+
+### retries and recovers when the first movies query comes back empty but the second doesn't
+**Steps:** Load the real app where the movies query returns 0 rows on
+its first call and 2 movies on a second call.
+**Expected:** The collection ends up showing "2 movies," and the session
+was checked more than once (the retry re-checks it).
+
+### does not retry a query that returns data on the first attempt
+**Steps:** Load the real app where the movies query returns 2 movies
+immediately.
+**Expected:** The collection shows "2 movies," and the query only ran once.
+
+### shows a genuinely empty collection as empty, without retrying forever
+**Steps:** Load the real app where the movies query always returns 0 rows.
+**Expected:** The collection shows "0 movies," and the query ran exactly
+twice (the original attempt plus one retry, not an unbounded loop).
