@@ -223,6 +223,22 @@
   const watchlistList = el("watchlist-list");
   const watchlistEmptyState = el("watchlist-empty-state");
 
+  // A successful-but-empty query result right after a fresh page load is
+  // suspicious — the collection/watchlist genuinely being empty is one
+  // explanation, but so is a transient race with Supabase's session/token
+  // refresh (e.g. after the access token expired while the tab was
+  // closed): the query can succeed with RLS silently matching zero rows
+  // instead of erroring. Re-checking the session (which refreshes it if
+  // needed) and retrying once is cheap and self-healing either way — a
+  // genuinely empty result just comes back empty again.
+  async function queryWithEmptyRetry(runQuery) {
+    const first = await runQuery();
+    if (first.error || (first.data && first.data.length > 0)) return first;
+    await new Promise((r) => setTimeout(r, 800));
+    await window.supabaseClient.auth.getSession();
+    return runQuery();
+  }
+
   // ---------- Data loading ----------
   async function init() {
     if (DEMO_MODE) {
@@ -252,10 +268,9 @@
       // succeeds or not.
       document.body.style.visibility = "visible";
 
-      const { data, error } = await window.supabaseClient
-        .from("movies")
-        .select(SELECT_COLUMNS)
-        .order("title");
+      const { data, error } = await queryWithEmptyRetry(() =>
+        window.supabaseClient.from("movies").select(SELECT_COLUMNS).order("title")
+      );
       if (error) {
         console.error(error);
         document.body.innerHTML = `<p style="padding:40px;color:#eceef2;font-family:sans-serif;">Failed to load your collection. Please refresh.</p>`;
@@ -263,10 +278,12 @@
       }
       state.allMovies = data;
 
-      const { data: watchlistData, error: watchlistError } = await window.supabaseClient
-        .from("watchlist")
-        .select(SELECT_COLUMNS_WATCHLIST)
-        .order("date_added", { ascending: false });
+      const { data: watchlistData, error: watchlistError } = await queryWithEmptyRetry(() =>
+        window.supabaseClient
+          .from("watchlist")
+          .select(SELECT_COLUMNS_WATCHLIST)
+          .order("date_added", { ascending: false })
+      );
       if (watchlistError) {
         console.error(watchlistError);
       } else {

@@ -11,9 +11,21 @@ function bodyMarkup() {
   return html.match(/<body[^>]*>([\s\S]*)<\/body>/i)[1].replace(/<script[\s\S]*?<\/script>/gi, "");
 }
 
-function fakeQuery(result) {
+// `resultOrSequence` is either a static { data, error } result, or a
+// function(callIndex) returning one — lets a test simulate e.g. "empty on
+// the first query, populated on the retry" (see queryWithEmptyRetry in
+// app.js). `counter` is shared across every `.from(table)` call for that
+// table, not just within one query-builder instance — app.js's retry
+// calls `.from(table)` fresh each time, so a counter scoped to a single
+// fakeQuery() call would just see index 0 again on the retry.
+function fakeQuery(resultOrSequence, counter) {
   return {
-    select: () => ({ order: async () => result }),
+    select: () => ({
+      order: async () => {
+        const idx = counter.count++;
+        return typeof resultOrSequence === "function" ? resultOrSequence(idx) : resultOrSequence;
+      },
+    }),
     update: () => ({ eq: async () => ({ error: null }) }),
   };
 }
@@ -62,9 +74,17 @@ export async function bootRealApp({
 
   const getSession = vi.fn(async () => ({ data: { session } }));
   const onAuthStateChange = vi.fn();
+  const callCounters = { movies: { count: 0 }, watchlist: { count: 0 } };
   const from = vi.fn((table) => {
-    if (table === "movies") return fakeQuery({ data: movies, error: null });
-    if (table === "watchlist") return fakeQuery({ data: watchlist, error: null });
+    if (table === "movies") {
+      return fakeQuery(typeof movies === "function" ? movies : { data: movies, error: null }, callCounters.movies);
+    }
+    if (table === "watchlist") {
+      return fakeQuery(
+        typeof watchlist === "function" ? watchlist : { data: watchlist, error: null },
+        callCounters.watchlist
+      );
+    }
     throw new Error(`Unexpected table in test: ${table}`);
   });
   window.supabaseClient = { auth: { getSession, onAuthStateChange }, from };
@@ -73,11 +93,17 @@ export async function bootRealApp({
   await import("../../app.js");
 
   if (session) {
-    await vi.waitFor(() => {
-      if (document.getElementById("columns-menu").childElementCount === 0) {
-        throw new Error("app not yet booted");
-      }
-    });
+    // Generous timeout: queryWithEmptyRetry (app.js) can add an 800ms
+    // delay on top of the queries themselves if a test simulates an
+    // empty-then-populated response.
+    await vi.waitFor(
+      () => {
+        if (document.getElementById("columns-menu").childElementCount === 0) {
+          throw new Error("app not yet booted");
+        }
+      },
+      { timeout: 3000 }
+    );
   } else {
     await vi.waitFor(() => {
       if (getSession.mock.calls.length === 0) throw new Error("session check not yet run");
