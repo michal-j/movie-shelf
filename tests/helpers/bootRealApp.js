@@ -12,7 +12,10 @@ function bodyMarkup() {
 }
 
 function fakeQuery(result) {
-  return { select: () => ({ order: async () => result }) };
+  return {
+    select: () => ({ order: async () => result }),
+    update: () => ({ eq: async () => ({ error: null }) }),
+  };
 }
 
 // jsdom doesn't implement matchMedia; app.js tolerates that (falls back to
@@ -38,7 +41,13 @@ function stubMatchMedia(touch) {
  * exists (prevents a flash of the empty app shell before redirecting a
  * signed-out visitor to /login).
  */
-export async function bootRealApp({ session = null, movies = [], watchlist = [], touch = false } = {}) {
+export async function bootRealApp({
+  session = null,
+  movies = [],
+  watchlist = [],
+  touch = false,
+  fetchImpl = null,
+} = {}) {
   document.body.innerHTML = bodyMarkup();
   const style = document.createElement("style");
   style.textContent = "body { visibility: hidden; }";
@@ -46,6 +55,10 @@ export async function bootRealApp({ session = null, movies = [], watchlist = [],
 
   delete window.MOVIE_SHELF_DEMO;
   stubMatchMedia(touch);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(fetchImpl || (async () => ({ ok: true, json: async () => ({ providers: [], link: null }) })))
+  );
 
   const getSession = vi.fn(async () => ({ data: { session } }));
   const onAuthStateChange = vi.fn();

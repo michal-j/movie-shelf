@@ -1552,6 +1552,21 @@
     if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId, newItem.mediaType);
   }
 
+  // Rebuilding the whole watchlist grid/chips on every single completion
+  // (below) is cheap for one item but not for a burst of them landing
+  // within milliseconds of each other — debounced so a whole batch
+  // collapses into one re-render instead of thrashing the DOM once per
+  // item. Detail-drawer updates stay immediate (see caller) since that's
+  // one targeted item, not a full rebuild.
+  let watchlistRefreshRenderTimer = null;
+  function scheduleWatchlistRefreshRender() {
+    clearTimeout(watchlistRefreshRenderTimer);
+    watchlistRefreshRenderTimer = setTimeout(() => {
+      buildWatchlistFilterChips();
+      if (state.activeView === "watchlist") render();
+    }, 300);
+  }
+
   async function fetchAndStoreStreamingProviders(id, tmdbId, mediaType) {
     try {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
@@ -1571,8 +1586,7 @@
         item.streamingProviders = data.providers;
         item.streamingLink = data.link;
         item.streamingFetchedAt = fetchedAt;
-        buildWatchlistFilterChips();
-        if (state.activeView === "watchlist") render();
+        scheduleWatchlistRefreshRender();
         if (detailModalOpenId === id) renderDetailBody(item);
       }
     } catch (err) {
@@ -1584,12 +1598,35 @@
 
   // Keeps cached streaming availability roughly in sync with TMDB's own
   // once-a-day refresh from JustWatch, without a live call on every render.
+  //
+  // Capped and throttled — refreshing every stale item unconditionally
+  // used to fire one fetch+Supabase-write per item, all at once, on every
+  // real-app page load. With a large watchlist where a meaningful chunk
+  // has gone stale (e.g. after a day away), that's dozens of concurrent
+  // requests from a single mobile connection, likely the cause of
+  // reported multi-minute unresponsiveness that a reload didn't fix
+  // (reloading just re-triggered the same burst). Oldest-stale-first with
+  // a per-load cap means a capped run still makes real progress on a
+  // large backlog across consecutive sessions, instead of either doing
+  // nothing or trying to do everything at once.
+  const STALE_STREAMING_REFRESH_LIMIT = 20;
+  const STALE_STREAMING_CONCURRENCY = 4;
   function refreshStaleStreamingProviders() {
     const STALE_MS = 24 * 60 * 60 * 1000;
     const now = Date.now();
-    state.allWatchlist
+    const stale = state.allWatchlist
       .filter((w) => w.tmdbId && (!w.streamingFetchedAt || now - new Date(w.streamingFetchedAt).getTime() > STALE_MS))
-      .forEach((w) => fetchAndStoreStreamingProviders(w.id, w.tmdbId, w.mediaType));
+      .sort((a, b) => new Date(a.streamingFetchedAt || 0) - new Date(b.streamingFetchedAt || 0))
+      .slice(0, STALE_STREAMING_REFRESH_LIMIT);
+
+    let next = 0;
+    async function worker() {
+      while (next < stale.length) {
+        const w = stale[next++];
+        await fetchAndStoreStreamingProviders(w.id, w.tmdbId, w.mediaType);
+      }
+    }
+    for (let i = 0; i < Math.min(STALE_STREAMING_CONCURRENCY, stale.length); i++) worker();
   }
 
   // Confirmation is handled by the caller (a press-again-to-confirm button in

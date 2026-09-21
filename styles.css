@@ -356,11 +356,20 @@ main#content { padding: 20px; }
   aspect-ratio: 2 / 3;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.movie-card:hover {
-  transform: translateY(-4px);
-  border-color: #3a3f4c;
-  box-shadow: 0 14px 30px -12px rgba(0,0,0,0.6);
-  z-index: 2;
+/* Scoped to real hover devices only (mouse/trackpad) — on a touch device,
+   ANY :hover-triggered style change here makes WebKit treat the first tap
+   as "simulate hover" and defer the actual click to a second tap, on top
+   of (and inconsistent with) the deliberate tap-to-preview state in
+   app.js (bindCardOpen/.preview-active). That stacking is what made
+   watchlist cards with streaming icons need a 3rd tap to open — the
+   .card-overlay rule below has the same guard for the same reason. */
+@media (hover: hover) {
+  .movie-card:hover {
+    transform: translateY(-4px);
+    border-color: #3a3f4c;
+    box-shadow: 0 14px 30px -12px rgba(0,0,0,0.6);
+    z-index: 2;
+  }
 }
 
 .movie-card img.poster {
@@ -469,7 +478,9 @@ main#content { padding: 20px; }
   transform: translateY(6px);
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
-.movie-card:hover .card-overlay,
+@media (hover: hover) {
+  .movie-card:hover .card-overlay { opacity: 1; transform: translateY(0); }
+}
 .movie-card:focus-visible .card-overlay,
 .movie-card.preview-active .card-overlay { opacity: 1; transform: translateY(0); }
 
@@ -952,4 +963,13 @@ main#content { padding: 20px; }
   .movie-preview { flex-direction: column; gap: 10px; }
   .movie-preview-poster { display: none; }
   .movie-preview-hero { display: block; }
+
+  /* Mobile browser chrome (e.g. Chrome's bottom toolbar) can sit on top of
+     the visible viewport without content actually overflowing it, so
+     overflow-y: auto alone doesn't help — there's nothing to scroll to.
+     Extra bottom padding guarantees clearance for the modal's bottom-most
+     buttons (Cancel/Save, Cancel/Add to shelf) below any such toolbar;
+     env(safe-area-inset-bottom) adds further clearance above the home
+     indicator on iOS where relevant. */
+  .modal-overlay { padding-bottom: max(100px, env(safe-area-inset-bottom) + 80px); }
 }
