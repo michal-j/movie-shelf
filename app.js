@@ -87,6 +87,13 @@
   const GRID_COLS_MIN = 4;
   const GRID_COLS_MAX = 8;
   const GRID_COLS_DEFAULT = 6;
+  // Below this poster width, card text (title/meta) and the hover overlay
+  // stop reading comfortably — used to cap how many columns the "Per row"
+  // slider will actually offer at the current viewport width, instead of
+  // always allowing up to GRID_COLS_MAX regardless of how little room
+  // there is (which used to force posters far smaller than this).
+  const GRID_COLS_MIN_POSTER_PX = 150;
+  const GRID_GAP_PX = 18;
 
   // Locked columns always appear first, in this order, and can't be hidden.
   const LOCKED_LIST_COLUMNS = [
@@ -1796,10 +1803,23 @@
     render();
   }
 
+  function maxGridColsForViewport() {
+    const available = grid.clientWidth || window.innerWidth;
+    const fit = Math.floor((available + GRID_GAP_PX) / (GRID_COLS_MIN_POSTER_PX + GRID_GAP_PX));
+    return Math.min(GRID_COLS_MAX, Math.max(GRID_COLS_MIN, fit));
+  }
+
   function applyGridCols() {
+    const maxCols = maxGridColsForViewport();
+    const slider = el("grid-cols-slider");
+    slider.max = maxCols;
+    if (state.gridCols > maxCols) {
+      state.gridCols = maxCols;
+      localStorage.setItem(STORAGE_KEYS.gridCols, String(state.gridCols));
+    }
     grid.style.setProperty("--grid-cols", state.gridCols);
     if (watchlistGrid) watchlistGrid.style.setProperty("--grid-cols", state.gridCols);
-    el("grid-cols-slider").value = state.gridCols;
+    slider.value = state.gridCols;
     el("grid-cols-value").textContent = state.gridCols;
   }
 
@@ -1876,6 +1896,12 @@
       state.gridCols = Number(e.target.value);
       applyGridCols();
       localStorage.setItem(STORAGE_KEYS.gridCols, String(state.gridCols));
+    });
+
+    let resizeDebounceTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeDebounceTimer);
+      resizeDebounceTimer = setTimeout(applyGridCols, 150);
     });
 
     el("filter-toggle-btn").addEventListener("click", () => {

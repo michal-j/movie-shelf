@@ -87,6 +87,7 @@ img { max-width: 100%; }
 
 .search-wrap {
   flex: 1;
+  min-width: 0;
   max-width: 480px;
   display: flex;
   align-items: center;
@@ -200,7 +201,7 @@ img { max-width: 100%; }
   align-items: center;
   justify-content: space-between;
 }
-.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 10px; }
+.toolbar-left, .toolbar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 .control { display: flex; align-items: center; gap: 8px; }
 .control-label { font-size: 13px; color: var(--text-faint); white-space: nowrap; }
@@ -645,7 +646,10 @@ main#content { padding: 20px; }
   backdrop-filter: blur(2px);
 }
 #detail-modal .detail-modal {
-  width: min(460px, 92vw);
+  /* Leaves a wider backdrop strip on narrow phones so there's enough room
+     to tap outside the drawer to close it, instead of it nearly filling
+     the screen edge-to-edge. */
+  width: min(460px, 85vw);
   max-width: none;
   height: 100%;
   margin: 0;
@@ -840,8 +844,8 @@ main#content { padding: 20px; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
 .field textarea { resize: vertical; }
 
-.form-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
-.form-actions-right { display: flex; gap: 8px; }
+.form-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-top: 20px; }
+.form-actions-right { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---------- Toast ---------- */
 .toast {
@@ -871,6 +875,10 @@ main#content { padding: 20px; }
   .brand span { display: none; }
   main#content { padding: 12px; }
   .movie-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+  /* The grid's column count is fixed by auto-fill below this width, so the
+     "Per row" slider has nothing to control — hide it rather than leave a
+     control that moves but visibly does nothing. */
+  #grid-cols-control { display: none; }
 
   /* Below this width the 4-column filter grid gets too cramped — stack
      every group full-width in DOM order instead of keeping the fixed
