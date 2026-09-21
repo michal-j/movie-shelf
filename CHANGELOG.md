@@ -9,6 +9,37 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ### Added
 
+- Mobile hamburger menu combining Add movie/Add to watchlist and Sign
+  out below 640px, freeing up room for the search bar.
+- `tests/cardPreview.test.js`, `tests/mobileMenu.test.js`.
+
+### Changed
+
+- Movie cards on touch devices now require a deliberate second tap to
+  open the detail drawer — the first tap previews the card's overlay
+  (title/meta/scores), a second tap on that same card opens it, and
+  tapping a different card moves the preview instead. Desktop
+  mouse/keyboard is unaffected. Replaces relying on WebKit's native
+  (and inconsistent) "first tap simulates hover" behavior.
+- Add-movie preview goes to a stacked landscape layout (using the TMDB
+  backdrop image) below 640px, instead of a narrow portrait thumbnail
+  squeezed beside a long text column.
+
+### Fixed
+
+- Add-movie preview poster no longer stretches vertically to match the
+  text column's height (a flex `align-items: stretch` bug, not just a
+  mobile issue).
+- Search bar placeholder text no longer overflows past the input's
+  border on narrow screens.
+- Movie cards: fixed a rare glitch where the detail drawer would flash
+  open then immediately close (same root cause as the tap-to-preview
+  change above, not confirmed independently reproduced).
+
+## [2026-09-21]
+
+### Added
+
 - Responsive breakpoint pass (tablet + mobile) across the whole app, not
   just the pages already covered — see Fixed below for what it caught.
 - `tests/gridColumns.test.js`: covers the new viewport-based cap on the

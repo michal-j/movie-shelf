@@ -240,6 +240,65 @@ since the Supabase migration:
     responsive (hiding columns, a card-based layout, etc.) is a real
     design decision, not a bug fix — raise it with the user first if it
     comes up again.
+- **Round 2 of the mobile pass (2026-09-21), from real iPhone testing**
+  (the previous round was emulator-only): the first round didn't cover
+  actual touch behavior, real device quirks, or the add-movie flow (it's
+  inert in demo — see below). Found and fixed:
+  - **Tap-to-preview on touch devices**: movie cards used to rely purely
+    on `.movie-card:hover .card-overlay` plus WebKit's native "first tap
+    simulates hover, second tap fires the click" behavior. In practice
+    this was inconsistent — some cards opened the drawer on the first
+    tap, others needed a second, and it's implicated in a separate
+    glitch (drawer flashes open then immediately closes, then a second
+    tap opens it with no animation) that couldn't be reliably
+    reproduced. Replaced with explicit state: `bindCardOpen()` in app.js
+    tracks a `previewCard`/`.preview-active` class per card — first tap
+    on touch (`TOUCH_DEVICE`, from `matchMedia("(hover: none)")`) always
+    just reveals the overlay, a second tap on the *same*, already-active
+    card opens the drawer, tapping a *different* card moves the preview
+    instead of opening anything, and tapping outside any card (or
+    closing the drawer) clears it. Desktop mouse/keyboard is unaffected
+    — real `:hover` already previews there, so a click always opens
+    directly. This should also resolve the flash-open-then-close glitch,
+    since `openDetailModal()` is now only ever called from a deliberate
+    second tap rather than racing with WebKit's native hover-click
+    handling — but since that glitch was never reproduced outside a real
+    device, treat this as "very likely fixed, please confirm" rather
+    than verified.
+  - **Topbar/search input min-width**: `.search-wrap input` needed its
+    own `min-width: 0` (not just `.search-wrap`, see round 1) — without
+    it the `<input>`'s own intrinsic minimum width overflowed its
+    already-shrunk parent, which visually showed as the search
+    placeholder text spilling out past the input's rounded border.
+  - **Add-movie preview poster stretch**: `.movie-preview-poster` (a
+    fixed 90px-wide, `aspect-ratio: 2/3` portrait thumbnail) sat in a
+    `display: flex` row next to the text column. Flex's default
+    `align-items: stretch` was stretching the poster to match however
+    tall the text column got (long overview + cast list), and
+    `object-fit: cover` then zoomed/cropped the poster image to fill
+    that unnaturally tall box instead of a normal poster crop. Fixed
+    with `align-self: flex-start` on the poster (applies at every
+    breakpoint — this was a real bug regardless of screen size, just
+    most visible on a phone where the narrower text column wraps into
+    more lines). Below 640px goes further: the portrait poster is
+    replaced by a full-width **landscape** hero image
+    (`.movie-preview-hero`, `aspect-ratio: 16/9`, using
+    `data.backdropUrl` — the same TMDB backdrop the detail drawer's
+    `.detail-hero` already uses — falling back to `posterUrl` then a
+    `gradientFor()` color if neither exists), stacked above the text
+    instead of squeezed beside it.
+  - **Mobile hamburger menu**: "Add movie"/"Add to watchlist" (full
+    label) plus the icon-only Sign out button left too little room for
+    the search bar on a phone. Below 640px both are hidden and replaced
+    by a single `#mobile-menu-btn` (hamburger icon) that opens a small
+    dropdown (`#mobile-menu`) with both actions — `#mobile-add-btn`
+    (label kept in sync with the active tab, same as
+    `#add-movie-btn-label`) and `#mobile-sign-out-btn` (index.html
+    only — no session to sign out of in the demo, so `demo.html` doesn't
+    get this item at all). Both proxy to the *same* demo-inert-check /
+    click-handler logic as the original buttons, not a separate
+    reimplementation. Standard outside-click-to-close, same pattern as
+    the columns menu and filter panel.
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
@@ -386,6 +445,27 @@ Still deferred, in roughly the order the user raised them:
    the watchlist via manual/bulk import. Extending the search-as-you-type
    flow (and its preview/confirm UI) to also find and add TV shows is
    deferred. Not started.
+
+**⚠️ Open, unresolved bug report (2026-09-21) — needs investigation, not
+a "later" item, just not diagnosable from code alone:** on a real
+iPhone, Personal collection briefly showed 0 movies for a minute or two
+("as if it lost connection with the DB"), then recovered on its own with
+no action taken. Only happened once so far and couldn't be reproduced.
+Nothing in `init()` re-fetches movies after the initial page load — no
+polling, no retry — so "resolved itself" without a page reload is hard
+to explain from the client code alone. Best guess, unconfirmed: iOS
+backgrounding the tab for a while, then either (a) Safari silently
+reloading the page fresh on foreground (common under memory pressure)
+and that first fetch racing a not-yet-ready Supabase session, or
+(b) Supabase's background token refresh leaving a brief window where a
+query runs with no valid `auth.uid()`, which the RLS policy (§5) would
+turn into a *successful* empty result (`data: [], error: null`), not an
+error — so nothing would show in `console.error` either. If this
+happens again, useful info to capture: was the phone/tab backgrounded
+right before it happened, was the network flaky at the time (wifi ↔
+cellular handoff, etc.), and does reloading the page fix it immediately
+(supports the "stale session on reload" theory) or does it take the
+same minute-or-two either way (points more at token refresh timing).
 
 ---
 
@@ -541,10 +621,14 @@ which is still plain `<script>` tags with zero bundling.
   (search/watched/format/copies/genre/country/decade, combined filters,
   Clear all, sorting), Watchlist filtering (genre/country/decade/streaming
   available/streaming service, Clear all), the login page's structure and
-  its sign-in success/error handling, and the real app's auth gate
+  its sign-in success/error handling, the real app's auth gate
   (`authGate.test.js` — the app shell stays hidden with no session, and
   is revealed once one's confirmed; this is the regression test for the
-  flash-of-the-app-before-redirecting-to-login bug, see §4).
+  flash-of-the-app-before-redirecting-to-login bug, see §4), the
+  viewport-based cap on the "Per row" slider (`gridColumns.test.js`), the
+  tap-to-preview-then-open behavior on touch devices
+  (`cardPreview.test.js`), and the mobile hamburger menu
+  (`mobileMenu.test.js`, both `DEMO_MODE` and real-app boots).
 - **Known gap**: CSS Grid geometry (§4's filter panel layout) isn't
   covered — jsdom doesn't run a real layout engine, so column positions
   and row-stretching can only be verified in an actual browser. Also not

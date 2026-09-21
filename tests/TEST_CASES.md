@@ -255,3 +255,66 @@ grid's `--grid-cols` CSS variable matches the slider's new value.
 ### allows the full column range again on a wide window
 **Steps:** Load the app with the window reporting a width of 1600px.
 **Expected:** The slider's maximum is back to 8.
+
+---
+
+## Tap-to-preview on touch devices (`cardPreview.test.js`)
+
+*(Regression tests for a real bug: on iPhone, tapping a movie card
+sometimes opened the detail drawer on the first tap and sometimes needed
+a second tap, depending on the card's content — an artifact of relying
+on WebKit's native "first tap simulates :hover" behavior instead of
+controlling it directly. Also implicated in a second, unreproducible
+glitch where the drawer would flash open then immediately close.)*
+
+### does not open the drawer on the first tap; opens on the second
+**Steps:** Simulate a touch device. Click a movie card once, then click
+it again.
+**Expected:** After the first click, the card is marked as previewing
+and the drawer stays closed. After the second click, the drawer opens.
+
+### moves the preview to a different card instead of opening it
+**Steps:** Simulate a touch device. Click one card, then click a
+different card.
+**Expected:** The first card stops previewing, the second card starts,
+and the drawer stays closed throughout.
+
+### clears the preview when tapping outside any card
+**Steps:** Simulate a touch device. Click a card, then click elsewhere
+on the page (outside any card).
+**Expected:** The card's preview state clears.
+
+### opens directly on a single click on non-touch devices
+**Steps:** Simulate a non-touch (mouse/desktop) device. Click a movie
+card once.
+**Expected:** The drawer opens immediately — no second click needed.
+
+---
+
+## Mobile hamburger menu (`mobileMenu.test.js`)
+
+*(Regression coverage for the mobile menu that combines Add movie and
+Sign out below 640px, freeing up room for the search bar.)*
+
+### starts closed, opens and closes via its toggle button (demo)
+**Steps:** Click the hamburger menu button twice.
+**Expected:** First click opens the menu and marks the button active;
+second click closes it and un-marks the button.
+
+### closes when clicking outside the menu (demo)
+**Steps:** Open the menu, then click elsewhere on the page.
+**Expected:** The menu closes.
+
+### its Add-movie item is inert in demo mode, matching the topbar button (demo)
+**Steps:** Load the demo app.
+**Expected:** The menu's Add-movie item has the same inert styling
+(`btn-inert`, `aria-disabled`) as the topbar's Add-movie button.
+
+### has no Sign out item (demo has no session)
+**Steps:** Load the demo app.
+**Expected:** No `#mobile-sign-out-btn` element exists in the demo's markup.
+
+### Add movie item opens the edit modal and closes the menu (real app)
+**Steps:** Load the real (non-demo) app with a valid session. Open the
+hamburger menu, then click its Add-movie item.
+**Expected:** The edit modal opens, and the hamburger menu closes.
