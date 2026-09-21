@@ -197,6 +197,49 @@ since the Supabase migration:
   - The filter panel also now closes on outside-click and Escape (`app.js`,
     same `document`-level listener pattern as the columns menu), not just
     the "Filters" toggle button.
+- **Tablet/mobile pass (2026-09-21)**: the app had only ever been
+  eyeballed at desktop width plus the login page and filter panel
+  specifically. A deliberate breakpoint audit (login, both tabs, grid +
+  list view, filter panel, detail drawer, edit/add modals, at ~768px and
+  ~390px) turned up several real overflow bugs, all fixed:
+  - `.search-wrap` (topbar) didn't shrink below its `<input>`'s intrinsic
+    min-width, so the Add-movie/Add-to-watchlist button got clipped off
+    the right edge on narrow screens — and made the whole page (including
+    any open modal) require horizontal scrolling to see in full, since
+    `document.body`'s width was genuinely wider than the viewport. Fixed
+    with `min-width: 0` on `.search-wrap` — the standard fix for a flex
+    item not shrinking past its content's intrinsic size.
+  - `.toolbar-left`/`.toolbar-right` (Sort/Filters/Columns and
+    counter/Per-row/view-toggle) didn't wrap internally — the existing
+    900px breakpoint only wraps them onto separate lines *relative to each
+    other*, not their own children. Worst in list view, where the extra
+    "Columns" button pushed it over. Fixed with `flex-wrap: wrap` added to
+    both unconditionally (harmless — only engages when there isn't room).
+  - The "Per row" grid-columns slider (`grid-cols-slider`, min 4/max 8)
+    let you pick more columns than the viewport could show at a
+    comfortable poster size — `minmax(0, 180px)` tracks will shrink all
+    the way to near-zero to fit N columns into whatever width is
+    available, with no lower bound. `maxGridColsForViewport()` in app.js
+    now caps the slider's `max` (and clamps a too-large saved value) to
+    whatever fits at `GRID_COLS_MIN_POSTER_PX` (150px) per column,
+    recomputed on load and on a debounced `resize` listener. The control
+    is also hidden entirely below 640px (`#grid-cols-control` in the
+    existing mobile media query), where the grid's column count is fixed
+    by CSS (`auto-fill, minmax(120px, 1fr)`) and the slider did nothing.
+  - Detail drawer width went from `min(460px, 92vw)` to `min(460px, 85vw)`
+    — on a phone it was nearly edge-to-edge, leaving too little visible
+    backdrop to comfortably tap outside it to close.
+  - The Add-movie panel's `.form-actions` row (Format select + Cancel +
+    Add-to-shelf, `display:flex; justify-content:space-between`, no wrap)
+    crammed all three into one row on narrow screens. Added
+    `flex-wrap: wrap` there too.
+  - **Not changed**: list view's many fixed-width columns still need
+    horizontal scrolling on tablet/mobile to see every column — but that
+    scroll is contained within `.movie-list` itself (`overflow-x: auto`),
+    it doesn't leak into the page. Left as-is; making list view itself
+    responsive (hiding columns, a card-based layout, etc.) is a real
+    design decision, not a bug fix — raise it with the user first if it
+    comes up again.
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
@@ -348,6 +391,25 @@ Still deferred, in roughly the order the user raised them:
 
 ## 7. Environment / secrets / deployment gotchas
 
+- **⚠️ Never add `"type": "module"` to the root `package.json`** without
+  accounting for `/api/*`. This broke Add-movie/Add-to-watchlist in
+  production for real (not caught until the next session, because demo
+  mode never calls these endpoints — see §9's known gap): the three
+  `/api/*` serverless functions use CommonJS (`module.exports = ...`),
+  and `"type": "module"` at the project root makes Node — and therefore
+  Vercel's function runtime — parse every `.js` file in the project as
+  an ES module by default, `/api/*` included. `module` isn't defined in
+  ES module scope, so every request to those functions started throwing
+  on invocation, and Vercel's generic crash page ("A server error has
+  occurred…", not JSON) got returned to the client instead — which is
+  why the browser-side error was a `JSON.parse`/"Unexpected token"
+  message, not anything that looked like an API or auth problem. The
+  test suite (the reason `"type": "module"` got added) does not need it
+  — Vitest transforms `import`/`export` in test files regardless; only
+  `vitest.config.mjs`'s own extension matters for that, which is why
+  it's `.mjs` rather than `.js`. If test tooling ever genuinely needs
+  `"type": "module"` for something, scope it with a nested
+  `tests/package.json`, not the root one.
 - **Clean URLs** (added 2026-09-20): `vercel.json` sets `"cleanUrls": true`,
   so `/login` and `/demo` serve `login.html`/`demo.html` in production
   (and Vercel 308-redirects the `.html` version to the clean one). Every
@@ -448,7 +510,7 @@ Still deferred, in roughly the order the user raised them:
 
 ## 9. Automated tests (added 2026-09-20)
 
-There was no test suite before this. `package.json` + `vitest.config.js`
+There was no test suite before this. `package.json` + `vitest.config.mjs`
 exist solely for this — they don't add a build step to the app itself,
 which is still plain `<script>` tags with zero bundling.
 
@@ -489,4 +551,15 @@ which is still plain `<script>` tags with zero bundling.
   covered: the add-movie search/lookup flow, duplicate-copy merging, and
   anything requiring a real Supabase call — all would need mocking
   `window.supabaseClient` and the `/api/*` endpoints, which nothing here
-  does yet.
+  does yet. **This gap is exactly how the `"type": "module"` regression
+  (§7) shipped without being caught**: Add-movie is inert in `DEMO_MODE`
+  (no real endpoint to hit), so no manual or automated check ever
+  exercised `/api/*` after that change — it was only found by testing
+  the real deployment directly. If `/api/*` gets covered by tests later,
+  it also closes this hole.
+- `tests/gridColumns.test.js` (added 2026-09-21): the "Per row" slider's
+  viewport-based max (see §2/§4) — capped on a narrow window, clamps a
+  saved value down to fit, and opens back up on a wide one. Exercises
+  `window.innerWidth` directly since jsdom gives every element
+  `clientWidth: 0` (no real layout) and `maxGridColsForViewport()` falls
+  back to `window.innerWidth` in that case.

@@ -229,3 +229,29 @@ hidden (never flashes the app shell) before redirecting away.
 **Steps:** Load the real (non-demo) app with a valid Supabase session
 and a one-movie collection.
 **Expected:** The page body becomes visible.
+
+---
+
+## Grid columns cap to viewport width (`gridColumns.test.js`)
+
+*(Regression tests for a real bug found during a mobile/tablet pass: the
+"Per row" slider let you pick more columns than the window could show at
+a readable poster size, since grid columns had no minimum width — just
+shrank to fit however many were requested, however little room there
+was.)*
+
+### caps the 'Per row' slider's max below the usual ceiling on a narrow window
+**Steps:** Load the app with the window reporting a width of 900px.
+**Expected:** The slider's maximum is less than 8 (the usual ceiling),
+and its current value is never above that reduced maximum.
+
+### clamps a previously-saved column count down to fit a narrow window
+**Steps:** Save "8" as the last-used column count (as if picked on a
+wide window earlier). Load the app with the window reporting a width of
+900px.
+**Expected:** The slider's value is brought down below 8 to fit, and the
+grid's `--grid-cols` CSS variable matches the slider's new value.
+
+### allows the full column range again on a wide window
+**Steps:** Load the app with the window reporting a width of 1600px.
+**Expected:** The slider's maximum is back to 8.

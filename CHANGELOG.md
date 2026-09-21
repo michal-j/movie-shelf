@@ -7,6 +7,45 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ## [Unreleased]
 
+### Added
+
+- Responsive breakpoint pass (tablet + mobile) across the whole app, not
+  just the pages already covered — see Fixed below for what it caught.
+- `tests/gridColumns.test.js`: covers the new viewport-based cap on the
+  "Per row" slider.
+
+### Changed
+
+- The "Per row" grid-columns slider's maximum now scales down with the
+  available width (recomputed on window resize too), instead of always
+  allowing up to 8 columns regardless of how little room there is — that
+  used to shrink posters far enough that card text and the hover overlay
+  stopped fitting. The control itself is hidden below 640px, where the
+  grid's column count is fixed by CSS anyway and the slider had no effect.
+- Detail drawer is slightly narrower on phones (`92vw` → `85vw` of its
+  `min(460px, …)` cap), leaving more backdrop visible to tap outside it
+  and close it.
+- The Add-movie panel's Format field and Cancel/Add-to-shelf buttons now
+  wrap onto their own lines on narrow screens instead of being forced
+  into one cramped row.
+
+### Fixed
+
+- **Add movie/Add to watchlist was completely broken in production**
+  (`Unexpected token 'A', "A server e"... is not valid JSON`). Caused by
+  `"type": "module"` in the root `package.json` (added for the test
+  suite two entries up) silently changing how Vercel parses the
+  CommonJS `/api/*` serverless functions, which then crashed on every
+  request. Removed; the test suite doesn't need it. See `HANDOFF.md` §8
+  — this must not be re-added without accounting for `/api`.
+- Topbar: the "Add movie"/"Add to watchlist" button no longer gets
+  clipped off the right edge on narrow screens (the search bar wasn't
+  shrinking to make room), which was also the reason modals could
+  require horizontal scrolling to see in full — same root cause, not a
+  separate modal bug.
+- Toolbar: Sort/Filters/Columns (list view) now wrap onto their own line
+  on narrow screens instead of overflowing the page.
+
 ## [2026-09-20]
 
 ### Added
