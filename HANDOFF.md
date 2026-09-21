@@ -299,6 +299,44 @@ since the Supabase migration:
     click-handler logic as the original buttons, not a separate
     reimplementation. Standard outside-click-to-close, same pattern as
     the columns menu and filter panel.
+- **Round 3 of the mobile pass (2026-09-21)** — round 2's tap-to-preview
+  fix wasn't actually a full fix, plus one severe, separate bug:
+  - **`.preview-active` (round 2) needed a `@media (hover: hover)` guard
+    on the *original* `:hover` rules, not just an additional selector
+    alongside them.** Without it, `.movie-card:hover` and
+    `.movie-card:hover .card-overlay` were still live on touch devices,
+    so WebKit's native "first tap simulates hover" quirk was still
+    intercepting the first tap *in addition to* the deliberate two-tap
+    state from `bindCardOpen()` — three taps total instead of two,
+    worse on watchlist cards with streaming-icon links in the overlay
+    (WebKit's heuristic seems to weight nested `<a>` elements). Both
+    `:hover` rules are now wrapped in `@media (hover: hover)`, so a
+    touch device never sees a `:hover`-triggered style change at all —
+    `.preview-active` (JS-driven) and `:focus-visible` (keyboard) are
+    the only overlay triggers left there, unconditional. This is also
+    the most likely fix for the drawer flash-open-then-close glitch,
+    which was still reproducible with round 2's incomplete fix — but
+    treat it the same way: very likely fixed, not confirmed, since it
+    was never reproduced outside a real device.
+  - **`.search-wrap input` needed its own `min-width: 0`** (not just
+    `.search-wrap`, see round 1) — the `<input>`'s own intrinsic minimum
+    width was overflowing its already-shrunk parent, which showed as
+    the search placeholder text spilling out past the input's border.
+  - **Add-movie modal buttons hidden behind mobile Chrome's bottom
+    toolbar**: `overflow-y: auto` on `.modal-overlay` only helps when
+    content actually overflows the *layout* viewport, but a mobile
+    browser's own toolbar can cover part of the *visual* viewport
+    without the page's layout viewport shrinking to match, leaving
+    nothing to scroll to reveal what's underneath. Fixed with
+    `padding-bottom: max(100px, env(safe-area-inset-bottom) + 80px)` on
+    `.modal-overlay` below 640px — generous, deliberately not tied to
+    any specific toolbar height, plus `env(safe-area-inset-bottom)` for
+    the iOS home-indicator area.
+  - **Severe, reproducible unresponsiveness / black screen** — see the
+    dedicated writeup in §6, it's substantial enough not to duplicate
+    here. Short version: `refreshStaleStreamingProviders()` was
+    completely unthrottled and is the most likely cause; now capped,
+    concurrency-limited, and debounced.
 - **Edit-existing-movie**: still the original manual form (title, year,
   genres, director, cast, description as comma-separated text fields,
   IMDb ID, format). Explicitly not reworked yet — see §6.
@@ -446,26 +484,49 @@ Still deferred, in roughly the order the user raised them:
    flow (and its preview/confirm UI) to also find and add TV shows is
    deferred. Not started.
 
-**⚠️ Open, unresolved bug report (2026-09-21) — needs investigation, not
-a "later" item, just not diagnosable from code alone:** on a real
-iPhone, Personal collection briefly showed 0 movies for a minute or two
-("as if it lost connection with the DB"), then recovered on its own with
-no action taken. Only happened once so far and couldn't be reproduced.
-Nothing in `init()` re-fetches movies after the initial page load — no
-polling, no retry — so "resolved itself" without a page reload is hard
-to explain from the client code alone. Best guess, unconfirmed: iOS
-backgrounding the tab for a while, then either (a) Safari silently
-reloading the page fresh on foreground (common under memory pressure)
-and that first fetch racing a not-yet-ready Supabase session, or
-(b) Supabase's background token refresh leaving a brief window where a
-query runs with no valid `auth.uid()`, which the RLS policy (§5) would
-turn into a *successful* empty result (`data: [], error: null`), not an
-error — so nothing would show in `console.error` either. If this
-happens again, useful info to capture: was the phone/tab backgrounded
-right before it happened, was the network flaky at the time (wifi ↔
-cellular handoff, etc.), and does reloading the page fix it immediately
-(supports the "stale session on reload" theory) or does it take the
-same minute-or-two either way (points more at token refresh timing).
+**⚠️ Real-iPhone unresponsiveness report — likely root cause found and
+fixed (2026-09-21), needs on-device confirmation before calling it
+closed.** First report: Personal collection briefly showed 0 movies,
+self-recovered after a minute or two, couldn't be reproduced. Second
+report (more serious, consistently reproducible): 0 movies again after
+normal use, then a manual reload produced a **black screen for ~2
+minutes** — not caused by backgrounding or a flaky network, and a manual
+reload did not resolve it faster. That second report pointed straight
+at `refreshStaleStreamingProviders()` (§4/§9): it used to fire one
+`fetch` + one Supabase write **per stale watchlist item, completely
+unthrottled**, unconditionally on every real-app load. A large watchlist
+with a meaningful chunk stale (>24h) means dozens of concurrent requests
+from a single mobile connection on *every* load — which would explain
+all of it: consistent reproduction (fires every load), a reload making
+it worse-or-same rather than better (the reload just re-triggers the
+same burst), and severe unresponsiveness (dozens of full watchlist
+re-renders landing in a tight window, on top of the network burst
+itself). It also composes badly with the auth-gate fix
+(`body { visibility: hidden }` until a session is confirmed, §4): if
+`init()` is still busy (or the main thread is busy from this burst) by
+the time a *reload* happens, the user sees a solid black screen for
+however long that takes, instead of at least the old flash-of-empty-
+shell — which matches the black-screen report exactly.
+
+Fixed: capped at 20 items per load, concurrency-limited to 4 in flight,
+oldest-stale-first (so a capped run still makes real progress on a large
+backlog across sessions), and the per-completion
+`buildWatchlistFilterChips()` + `render()` calls are now debounced
+(300ms) so a batch landing close together collapses into one re-render
+instead of one per item. See `fetchAndStoreStreamingProviders` /
+`refreshStaleStreamingProviders` in `app.js`, and
+`streamingRefreshThrottle.test.js` (§9) — confirmed the test fails
+without the concurrency limiting specifically, not just the cap.
+
+**Not fully confirmed** — this is the most plausible mechanism found,
+not a reproduced-and-fixed bug in the traditional sense (nothing here
+runs against a real Supabase project with a large real watchlist). If
+the 0-movies/unresponsiveness/black-screen symptoms recur after this
+ships, useful info: does it still happen on a fresh sign-in (rules out
+a large stale backlog specifically), and — if you have a Mac — Safari's
+remote Web Inspector (Settings → Safari → Advanced → Web Inspector on
+the phone, then Develop menu on the Mac) would give a real console/
+network trace, which is the only way to fully close this out.
 
 ---
 
@@ -627,8 +688,11 @@ which is still plain `<script>` tags with zero bundling.
   flash-of-the-app-before-redirecting-to-login bug, see §4), the
   viewport-based cap on the "Per row" slider (`gridColumns.test.js`), the
   tap-to-preview-then-open behavior on touch devices
-  (`cardPreview.test.js`), and the mobile hamburger menu
-  (`mobileMenu.test.js`, both `DEMO_MODE` and real-app boots).
+  (`cardPreview.test.js`), the mobile hamburger menu
+  (`mobileMenu.test.js`, both `DEMO_MODE` and real-app boots), and the
+  cap/concurrency-limit/ordering on the stale streaming-provider refresh
+  (`streamingRefreshThrottle.test.js` — the one regression test in this
+  suite for a bug severe enough to make the app unusable, see §6).
 - **Known gap**: CSS Grid geometry (§4's filter panel layout) isn't
   covered — jsdom doesn't run a real layout engine, so column positions
   and row-stretching can only be verified in an actual browser. Also not

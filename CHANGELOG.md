@@ -7,11 +7,39 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 
 ## [Unreleased]
 
+### Fixed
+
+- **Severe, reproducible mobile unresponsiveness (black screen for
+  minutes at a time)** — likely root cause: refreshing cached streaming
+  availability for stale watchlist items fired one `fetch` + one
+  Supabase write per item, completely unthrottled, on every real-app
+  load. Now capped at 20 items/load, concurrency-limited to 4, oldest-
+  stale-first, with debounced re-rendering. See `HANDOFF.md` §6 — not
+  independently confirmed against a real large watchlist, needs
+  on-device retest.
+- Movie cards on touch devices needed a 3rd tap to open the drawer
+  (regression from the previous tap-to-preview fix below): the original
+  `:hover` CSS rules were still active on touch devices alongside the
+  new tap-to-preview state, so WebKit's native hover-tap quirk and the
+  deliberate two-tap logic were stacking. Both `:hover` rules are now
+  scoped to `@media (hover: hover)` (real pointer devices only). Also
+  the most likely fix for the flash-open-then-close drawer glitch, which
+  was still reproducible before this — not independently confirmed.
+- Add-movie/Edit modal: Cancel/Save (or Cancel/Add to shelf) buttons no
+  longer hidden behind mobile Chrome's bottom toolbar — `overflow-y:
+  auto` alone doesn't help when the toolbar covers part of the visible
+  viewport without the layout viewport shrinking to match.
+
+## [2026-09-21]
+
 ### Added
 
 - Mobile hamburger menu combining Add movie/Add to watchlist and Sign
   out below 640px, freeing up room for the search bar.
-- `tests/cardPreview.test.js`, `tests/mobileMenu.test.js`.
+- Responsive breakpoint pass (tablet + mobile) across the whole app, not
+  just the pages already covered — see Fixed below for what it caught.
+- `tests/cardPreview.test.js`, `tests/mobileMenu.test.js`,
+  `tests/gridColumns.test.js`, `tests/streamingRefreshThrottle.test.js`.
 
 ### Changed
 
@@ -24,29 +52,6 @@ starts from 2026-09-20 — earlier history lives in `git log` and
 - Add-movie preview goes to a stacked landscape layout (using the TMDB
   backdrop image) below 640px, instead of a narrow portrait thumbnail
   squeezed beside a long text column.
-
-### Fixed
-
-- Add-movie preview poster no longer stretches vertically to match the
-  text column's height (a flex `align-items: stretch` bug, not just a
-  mobile issue).
-- Search bar placeholder text no longer overflows past the input's
-  border on narrow screens.
-- Movie cards: fixed a rare glitch where the detail drawer would flash
-  open then immediately close (same root cause as the tap-to-preview
-  change above, not confirmed independently reproduced).
-
-## [2026-09-21]
-
-### Added
-
-- Responsive breakpoint pass (tablet + mobile) across the whole app, not
-  just the pages already covered — see Fixed below for what it caught.
-- `tests/gridColumns.test.js`: covers the new viewport-based cap on the
-  "Per row" slider.
-
-### Changed
-
 - The "Per row" grid-columns slider's maximum now scales down with the
   available width (recomputed on window resize too), instead of always
   allowing up to 8 columns regardless of how little room there is — that
@@ -76,6 +81,11 @@ starts from 2026-09-20 — earlier history lives in `git log` and
   separate modal bug.
 - Toolbar: Sort/Filters/Columns (list view) now wrap onto their own line
   on narrow screens instead of overflowing the page.
+- Add-movie preview poster no longer stretches vertically to match the
+  text column's height (a flex `align-items: stretch` bug, not just a
+  mobile issue).
+- Search bar placeholder text no longer overflows past the input's
+  border on narrow screens.
 
 ## [2026-09-20]
 

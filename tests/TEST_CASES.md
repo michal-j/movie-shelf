@@ -318,3 +318,27 @@ second click closes it and un-marks the button.
 **Steps:** Load the real (non-demo) app with a valid session. Open the
 hamburger menu, then click its Add-movie item.
 **Expected:** The edit modal opens, and the hamburger menu closes.
+
+---
+
+## Stale streaming-provider refresh is capped and throttled (`streamingRefreshThrottle.test.js`)
+
+*(Regression test for a serious real bug: on page load, the real app
+used to refresh cached streaming availability for every stale watchlist
+item — one `fetch` + one Supabase write each — completely unthrottled,
+all at once. With a watchlist where a meaningful chunk has gone stale
+(>24h), that's dozens of concurrent requests from one mobile connection,
+almost certainly the cause of the app going unresponsive for minutes at
+a time, consistently, in a way a reload didn't fix — reloading just
+re-triggered the same burst.)*
+
+### fetches at most the capped number of items, oldest-stale-first, skipping fresh ones
+**Steps:** Load the real (non-demo) app with a 30-item watchlist: 5
+items never fetched, 20 items stale by varying amounts (1–20 days), 5
+items fetched an hour ago (not stale). Wait for the refresh to finish.
+**Expected:** Exactly 20 requests fire (the cap) — never more than 4 at
+once — covering the 5 never-fetched items plus the 15 most-overdue dated
+ones. The 5 least-urgent stale items and all 5 fresh items are never
+touched. (Verified this test actually catches the bug: reverting just
+the concurrency-limiting logic while keeping the cap makes it fail with
+20 requests in flight simultaneously instead of ≤4.)
