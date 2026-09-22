@@ -345,6 +345,31 @@ the concurrency-limiting logic while keeping the cap makes it fail with
 
 ---
 
+## Detail drawer open/close race (`detailDrawer.test.js`)
+
+*(Regression tests for a real bug reported on desktop: the drawer would
+sometimes hide itself immediately after opening, and the next open would
+snap into place with no slide-in animation. Root cause:
+`closeDetailModal()` schedules a 350ms fallback timer to force-hide the
+drawer (in case `transitionend` never fires), but never cancelled it if
+the drawer was reopened before it fired — clicking a different card while
+the previous one was still mid-close let that stale timer fire later and
+force-hide the newly opened drawer.)*
+
+### does not auto-hide a drawer reopened while the previous one is still closing
+**Steps:** Click a movie card to open the drawer. Click the backdrop to
+close it. Before the close finishes, click a different card to reopen.
+Wait past when the original close's fallback timer would have fired.
+**Expected:** The drawer stays open the whole time — the stale timer from
+the first close never force-hides the reopened drawer.
+
+### still animates the drawer open after that race
+**Steps:** Same sequence as above.
+**Expected:** The drawer ends up with its "open" (animated-in) state, not
+stuck in a half-open, unanimated state.
+
+---
+
 ## Empty query results are retried once before being trusted (`emptyResultRetry.test.js`)
 
 *(Regression tests for a reported real bug: a manual reload of the real

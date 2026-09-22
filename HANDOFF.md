@@ -643,6 +643,33 @@ Still deferred, in roughly the order the user raised them:
   pointed at backgrounding/network/an unrelated unthrottled-request bug
   (which was real and worth fixing) before a third, more specific report
   ("always on manual reload") actually narrowed it down.
+- **(2026-09-22) The "drawer flash-open-then-close" glitch (§4, §8
+  2026-09-21 entries) came back — this time reported and reproduced on
+  desktop**, proving the earlier round-3 fix (`@media (hover: hover)`,
+  2026-09-21) only closed the touch-specific trigger, not the underlying
+  mechanism. Actual root cause, found by scripting rapid click sequences
+  against a real browser and logging `#detail-modal`'s `hidden`/`class`
+  mutations: `closeDetailModal()` schedules a 350ms fallback `setTimeout`
+  to force-hide the drawer if `transitionend` never fires, but never
+  cancelled that timer if the drawer got reopened (a different card
+  clicked) before it fired — clicking a second card while the first
+  drawer was still mid-close (within the 280ms slide-out) let the stale
+  timer fire ~350ms after the *original* close and force-hide the
+  freshly reopened drawer. A second, compounding bug: the
+  `transitionend` listener wasn't filtered to the drawer panel's own
+  transform transition, so it could also fire early from an unrelated
+  child element's transition finishing (e.g. a button losing `:hover`)
+  and cut a legitimate close animation short — this is what produced the
+  "flash" (visible for ~85ms instead of the full 280ms) rather than a
+  clean slide. Fixed by tracking and cancelling any pending close
+  (timer + listener) at the start of every `openDetailModal()` call, and
+  filtering the `transitionend` handler to `e.target === panel &&
+  e.propertyName === "transform"`. Confirmed via the same scripted
+  repro in a real browser before and after the fix (failed before,
+  passed after) — see `tests/detailDrawer.test.js` for the jsdom-level
+  regression coverage (the auto-hide half reproduces reliably there with
+  real timers; the "no animation" half doesn't, since jsdom doesn't run
+  real CSS transitions).
 
 ---
 

@@ -1112,7 +1112,19 @@
   const detailModal = el("detail-modal");
   const detailBody = el("detail-body");
 
+  // A pending close (transitionend listener + fallback timer, see
+  // closeDetailModal) that hasn't finished yet when the drawer is reopened
+  // — e.g. clicking a different card while the previous one is still
+  // sliding shut — used to fire late and force-hide the *new*, freshly
+  // opened drawer out from under the user. It also left the "open" class
+  // stuck off (hidden=true, class already lacking "open") or the reverse,
+  // so the next open's classList.add("open") was sometimes a no-op and
+  // the drawer would snap into place with no slide-in animation. Cancel
+  // any pending close whenever a new open starts.
+  let cancelPendingDetailClose = () => {};
+
   function openDetailModal(id) {
+    cancelPendingDetailClose();
     detailModalOpenId = id;
     const movie = getMovieById(id);
     if (!movie) return;
@@ -1125,15 +1137,29 @@
 
   function closeDetailModal() {
     if (detailModal.hidden) return;
+    cancelPendingDetailClose();
     clearCardPreview();
     detailModal.classList.remove("open");
     const panel = detailModal.querySelector(".detail-modal");
     const finish = () => {
       detailModal.hidden = true;
+      cancelPendingDetailClose = () => {};
     };
     if (panel) {
-      panel.addEventListener("transitionend", finish, { once: true });
-      setTimeout(finish, 350); // fallback in case transitionend doesn't fire
+      // Only react to the panel's own slide transition finishing — a
+      // transitionend from some unrelated child (a button/pill hover
+      // transition, say) bubbles up too, and would otherwise fire this
+      // early and cut the close animation short.
+      const onTransitionEnd = (e) => {
+        if (e.target === panel && e.propertyName === "transform") finish();
+      };
+      const timer = setTimeout(finish, 350); // fallback in case transitionend doesn't fire
+      panel.addEventListener("transitionend", onTransitionEnd);
+      cancelPendingDetailClose = () => {
+        clearTimeout(timer);
+        panel.removeEventListener("transitionend", onTransitionEnd);
+        cancelPendingDetailClose = () => {};
+      };
     } else {
       finish();
     }

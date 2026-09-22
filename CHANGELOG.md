@@ -9,6 +9,25 @@ than by individual session.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Detail drawer flash-hide / no-animation-on-reopen, reproducible on
+  desktop** (previously thought to be a touch-only glitch, see the
+  2026-09-21 entries below — the earlier `@media (hover: hover)` fix only
+  addressed WebKit's touch-tap quirk, not this). Clicking a different
+  movie card while the previously opened drawer was still mid-close (the
+  280ms slide-out) could get the newly reopened drawer force-hidden a
+  moment later, then the next open would snap into place with no
+  animation at all. Root cause: `closeDetailModal()`'s 350ms fallback
+  timer (a safety net in case `transitionend` never fires) was never
+  cancelled when the drawer was reopened before it fired, so it force-hid
+  the *new* drawer out from under the user; a separate bug meant the
+  `transitionend` listener itself wasn't filtered to the drawer's own
+  transform transition, so it could also fire early from an unrelated
+  child element's transition (e.g. a button hover) and cut a legitimate
+  close animation short. Both are fixed in `openDetailModal`/
+  `closeDetailModal`; see `tests/detailDrawer.test.js`.
+
 ## [2026-09-21]
 
 ### Added
