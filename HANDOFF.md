@@ -457,6 +457,17 @@ user dropped in `watchlist_exports/` (untracked, not part of the repo —
 don't expect that folder to still exist later), plus the 2 TV shows added
 by hand afterward.
 
+A second, larger bulk import on 2026-09-22 added 486 more titles (451
+movies + 35 TV) sourced from Filmweb and Apple TV screenshots the user
+OCR'd/transcribed into a CSV (also dropped in `watchlist_exports/`, also
+untracked), matched to verified `imdb_id`s and enriched via TMDB+OMDb the
+same way `api/movie-lookup.js` does. Brings the table to **595 rows total
+(559 movies / 36 TV)**. Two data-integrity issues were caught and fixed
+before import: a transposed-digit `imdb_id` typo, and 25 rows where
+`tmdb_id` had gone stale relative to a correct `imdb_id`. **`imdb_id` is
+the ground truth** — if `tmdb_id` and `imdb_id` disagree, re-derive
+`tmdb_id` from `imdb_id` via TMDB's `/find` endpoint, never the reverse.
+
 ---
 
 ## 6. Known deferred work / backlog (explicitly "later, not now")
