@@ -722,6 +722,18 @@ Still deferred, in roughly the order the user raised them:
   (it would yank the *other* session's in-progress files this time) —
   recover with `git show <commit>:<path>` per file instead.
 
+- **Transition listeners must be torn down on *every* exit path.** The
+  detail drawer's close attached a `transitionend` listener to the (reused)
+  panel and only a fallback timer was cleaned up, so the stale listener
+  hid the *next* open once its own slide-in finished, leaving a stuck
+  `open` class (open → vanishes, open → no animation, repeat). Remove the
+  listener and timer together in one `finish()`, and cancel the pending
+  open `requestAnimationFrame` on close. See `closeDetailModal`.
+- **Anything that depends on remembered UI state (active tab, view mode)
+  must be applied before the shell is revealed**, not after the data
+  fetch — `init()` calls `syncViewChrome`/`syncViewModeChrome` and
+  `showLoadingSkeleton()` before `body.style.visibility = "visible"`.
+
 ---
 
 ## 9. Automated tests (added 2026-09-20)

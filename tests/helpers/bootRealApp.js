@@ -65,6 +65,9 @@ export async function bootRealApp({
   watchlist = [],
   touch = false,
   fetchImpl = null,
+  // false: return as soon as the shell is revealed, without waiting for the
+  // data queries to finish (lets a test inspect the in-between state).
+  waitForData = true,
 } = {}) {
   document.body.innerHTML = bodyMarkup();
   const style = document.createElement("style");
@@ -104,7 +107,11 @@ export async function bootRealApp({
   vi.resetModules();
   await import("../../app.js");
 
-  if (session) {
+  if (session && !waitForData) {
+    await vi.waitFor(() => {
+      if (document.body.style.visibility !== "visible") throw new Error("shell not yet revealed");
+    });
+  } else if (session) {
     // Generous timeout: queryWithEmptyRetry (app.js) can add an 800ms
     // delay on top of the queries themselves if a test simulates an
     // empty-then-populated response.

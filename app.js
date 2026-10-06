@@ -272,6 +272,12 @@
       // Session confirmed — safe to reveal the shell index.html hides by
       // default (see its inline <style>), whether the movies fetch below
       // succeeds or not.
+      // Paint the remembered tab/labels first — switchView() only runs
+      // after the data below loads, so the shell would otherwise show
+      // "Personal collection" as active for that long.
+      syncViewChrome(state.activeView);
+      syncViewModeChrome(state.viewMode);
+      showLoadingSkeleton();
       document.body.style.visibility = "visible";
 
       const { data, error } = await queryWithEmptyRetry(() =>
@@ -303,6 +309,7 @@
     applyGridCols();
     setViewMode(state.viewMode, { skipSave: true });
     switchView(state.activeView, { skipSave: true });
+    el("content").removeAttribute("aria-busy");
 
     if (!DEMO_MODE) {
       window.supabaseClient.auth.onAuthStateChange((event) => {
@@ -1962,8 +1969,8 @@
   });
 
   // ---------- View mode ----------
-  function setViewMode(mode, opts = {}) {
-    state.viewMode = mode;
+  // Toolbar controls that depend on grid vs. list mode.
+  function syncViewModeChrome(mode) {
     el("view-grid-btn").classList.toggle("active", mode === "grid");
     el("view-list-btn").classList.toggle("active", mode === "list");
     el("columns-toggle-btn").hidden = mode !== "list";
@@ -1972,6 +1979,11 @@
       el("columns-menu").hidden = true;
       el("columns-toggle-btn").classList.remove("active");
     }
+  }
+
+  function setViewMode(mode, opts = {}) {
+    state.viewMode = mode;
+    syncViewModeChrome(mode);
     if (!opts.skipSave) localStorage.setItem(STORAGE_KEYS.viewMode, mode);
     render();
   }
@@ -1998,11 +2010,45 @@
 
   // Not available in the demo (no watchlist tab/DOM there) — only called
   // from real-mode code paths (init, tab click handlers).
+  // Placeholder cards/rows shown in the active view's container while the
+  // first data fetch is in flight, so the page isn't blank. The first real
+  // render() replaces them (renderGrid/renderList both clear their
+  // container) — nothing here needs explicit teardown.
+  function showLoadingSkeleton() {
+    const watchlist = state.activeView === "watchlist";
+    const isGrid = state.viewMode === "grid";
+    const target = watchlist ? (isGrid ? watchlistGrid : watchlistList) : isGrid ? grid : list;
+    [grid, list, emptyState, watchlistGrid, watchlistList, watchlistEmptyState].forEach((c) => (c.hidden = c !== target));
+
+    if (isGrid) {
+      applyGridCols(); // after unhiding, so the width it measures is real
+      target.innerHTML = '<div class="movie-card skeleton skeleton-card"></div>'.repeat(
+        Math.max(12, state.gridCols * 3)
+      );
+    } else {
+      target.innerHTML = `
+        <div class="skeleton-row">
+          <div class="skeleton skeleton-row-poster"></div>
+          <div class="skeleton-row-text"><div class="skeleton"></div><div class="skeleton"></div></div>
+        </div>`.repeat(12);
+    }
+    el("content").setAttribute("aria-busy", "true");
+    counterEl.textContent = "Loading…";
+  }
+
+  // The static bits of the shell that depend on the active view: which tab
+  // is highlighted and the Add button labels.
+  function syncViewChrome(view) {
+    el("tab-collection").classList.toggle("active", view === "collection");
+    el("tab-watchlist").classList.toggle("active", view === "watchlist");
+    el("add-movie-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
+    el("mobile-add-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
+  }
+
   function switchView(view, opts = {}) {
     state.activeView = view;
     if (!opts.skipSave) localStorage.setItem(STORAGE_KEYS.activeView, view);
-    el("tab-collection").classList.toggle("active", view === "collection");
-    el("tab-watchlist").classList.toggle("active", view === "watchlist");
+    syncViewChrome(view);
 
     // Force every content container hidden, then let render() below
     // un-hide only the pair that belongs to the newly active view.
@@ -2017,8 +2063,6 @@
     else buildFilterChips();
     applyFilterPanelView(view);
     buildColumnsMenu(view === "watchlist" ? WATCHLIST_LIST_COLUMNS : LIST_COLUMNS);
-    el("add-movie-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
-    el("mobile-add-btn-label").textContent = view === "watchlist" ? "Add to watchlist" : "Add movie";
     render();
   }
 

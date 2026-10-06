@@ -256,6 +256,28 @@ hidden (never flashes the app shell) before redirecting away.
 and a one-movie collection.
 **Expected:** The page body becomes visible.
 
+### shows the remembered Watchlist tab as soon as the shell is revealed, before data loads
+*(Regression: the remembered tab was only applied after the data queries
+finished, so the shell briefly showed "Personal collection" as active.)*
+**Steps:** Save Watchlist as the last-visited view, load the real app with
+a valid session, and keep the movies query pending.
+**Expected:** The moment the page becomes visible, the Watchlist tab is
+active (Personal collection is not) and the Add button reads "Add to
+watchlist".
+
+### shows placeholder cards in the remembered view's grid while data loads, then replaces them
+**Steps:** Remember Watchlist + grid mode, load the real app with a valid
+session and keep the movies query pending. Then let it resolve.
+**Expected:** While pending, the Watchlist grid is visible and filled with
+at least 12 skeleton cards, the Personal collection grid is hidden, and
+the content area is marked busy. After load, no skeleton elements remain.
+
+### shows placeholder rows in list mode
+**Steps:** Remember Personal collection + list mode, load with the movies
+query pending.
+**Expected:** The list container shows skeleton rows, the grid is hidden,
+and the list-view toggle is already active.
+
 ---
 
 ## Grid columns cap to viewport width (`gridColumns.test.js`)

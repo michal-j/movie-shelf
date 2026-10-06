@@ -13,6 +13,11 @@ than by individual session.
 
 ### Added
 
+- **Loading skeleton.** While the first fetch is in flight, the active
+  view (Personal collection or Watchlist, grid or list) shows shimmering
+  placeholder cards/rows and a "Loading…" counter instead of a blank
+  page; the real render replaces them. Respects `prefers-reduced-motion`
+  (static placeholders). Real app only — the demo's data is local.
 - **Movie/TV separation**, across both the Personal collection and the
   Watchlist: a new "Type" filter group (Movies / TV Shows) in the same
   spot in the filter panel on both tabs, plus a "TV" badge/tag so it's
@@ -32,6 +37,12 @@ than by individual session.
 
 ### Fixed
 
+- **Wrong tab flashed on load.** When the remembered view was Watchlist,
+  the app showed "Personal collection" as the active tab (and "Add movie"
+  on the add button) for about a second until the data finished loading.
+  The remembered tab and button labels are now applied before the shell is
+  revealed. The grid/list toggle and its toolbar controls get the same
+  treatment, so a list-mode user no longer sees grid controls first.
 - **Detail drawer erratic open/close.** After closing the drawer by
   clicking outside, the next open slid out and immediately vanished, and
   the one after that appeared without its slide-in animation, repeating
@@ -40,7 +51,6 @@ than by individual session.
   stuck `open` class. `closeDetailModal` now tears down both its listener
   and fallback timer whichever fires first, and a close that lands before
   the open's animation-frame `open` add cancels it.
-
 - **Add search never found TV shows** (e.g. *The Blue Planet*, 2001): the
   search used TMDB's movie-only endpoint and the lookup only ever fetched
   `/movie/{id}`. Search now uses `/search/multi` (movies + TV, up to 8

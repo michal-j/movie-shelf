@@ -540,6 +540,37 @@ main#content { padding: 20px; }
 .card-meta span:not(:last-child)::after { content: "·"; margin-left: 4px; color: var(--text-faint); }
 
 
+/* ---------- Loading skeleton ---------- */
+/* Placeholders shown while the first data fetch is in flight (see
+   showLoadingSkeleton in app.js). A soft shimmer sweeps across them;
+   reduced-motion users get the static placeholder instead. */
+.skeleton {
+  background: linear-gradient(100deg, var(--bg-card) 30%, #242831 50%, var(--bg-card) 70%);
+  background-size: 300% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+.movie-card.skeleton-card { cursor: default; }
+@media (hover: hover) {
+  .movie-card.skeleton-card:hover { transform: none; box-shadow: none; border-color: var(--border); }
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+}
+.skeleton-row-poster { width: 32px; height: 46px; border-radius: 4px; flex-shrink: 0; }
+.skeleton-row-text { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.skeleton-row-text .skeleton { height: 11px; border-radius: 4px; width: min(260px, 60%); }
+.skeleton-row-text .skeleton:last-child { width: min(160px, 40%); height: 9px; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--bg-card); }
+}
+
 /* ---------- List view ---------- */
 .movie-list {
   display: flex;
