@@ -55,3 +55,50 @@ describe("detail drawer open/close race (desktop)", () => {
     expect(detailModal.classList.contains("open")).toBe(true);
   });
 });
+
+// Second root cause, found later: when the close finished via transitionend,
+// its listener (and fallback timer) were never removed. That zombie listener
+// then caught the *next* open's own slide-in transitionend and hid the
+// drawer the moment it finished sliding out; the hide left the "open" class
+// stuck on, so the open after that skipped its animation. Alternating
+// open → vanishes / open → no animation, indefinitely.
+describe("detail drawer reopen after a completed close (desktop)", () => {
+  function slideEnd(panel) {
+    const e = new window.Event("transitionend", { bubbles: true });
+    e.propertyName = "transform";
+    panel.dispatchEvent(e);
+  }
+
+  it("stays open after its own slide-in finishes following a completed close", async () => {
+    await bootDemoApp({ movies, watchlist, touch: false });
+    const cards = document.querySelectorAll("#movie-grid .movie-card");
+    const detailModal = document.getElementById("detail-modal");
+    const panel = detailModal.querySelector(".detail-modal");
+
+    click(cards[0]);
+    await wait(50);
+    click(detailModal);
+    slideEnd(panel); // close finishes via transitionend
+    expect(detailModal.hidden).toBe(true);
+
+    click(cards[0]);
+    await wait(50);
+    expect(detailModal.classList.contains("open")).toBe(true);
+    slideEnd(panel); // the new open's slide-in finishing
+    await wait(400);
+    expect(detailModal.hidden).toBe(false);
+    expect(detailModal.classList.contains("open")).toBe(true);
+  });
+
+  it("does not leave a stuck open class when closed before the open frame fires", async () => {
+    await bootDemoApp({ movies, watchlist, touch: false });
+    const cards = document.querySelectorAll("#movie-grid .movie-card");
+    const detailModal = document.getElementById("detail-modal");
+
+    click(cards[0]);
+    click(detailModal); // close immediately, before the double-rAF add
+    await wait(400);
+    expect(detailModal.hidden).toBe(true);
+    expect(detailModal.classList.contains("open")).toBe(false);
+  });
+});

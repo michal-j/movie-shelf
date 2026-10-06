@@ -394,6 +394,21 @@ the first close never force-hides the reopened drawer.
 **Expected:** The drawer ends up with its "open" (animated-in) state, not
 stuck in a half-open, unanimated state.
 
+### stays open after its own slide-in finishes following a completed close
+*(Second root cause: a close that finished via `transitionend` left its
+listener attached to the panel, so the next open's own slide-in
+`transitionend` hid the drawer — open → vanishes, then open → no
+animation, repeating.)*
+**Steps:** Open the drawer, close it by clicking the backdrop and let the
+close transition finish. Open a movie again and let the slide-in finish.
+**Expected:** The drawer stays visible with its "open" class.
+
+### does not leave a stuck open class when closed before the open frame fires
+**Steps:** Open the drawer and close it immediately (before the two
+animation frames that add the "open" class have run).
+**Expected:** The drawer ends up hidden with no "open" class, so the next
+open still animates.
+
 ---
 
 ## Empty query results are retried once before being trusted (`emptyResultRetry.test.js`)

@@ -32,6 +32,15 @@ than by individual session.
 
 ### Fixed
 
+- **Detail drawer erratic open/close.** After closing the drawer by
+  clicking outside, the next open slid out and immediately vanished, and
+  the one after that appeared without its slide-in animation, repeating
+  indefinitely. The close's `transitionend` listener was never removed, so
+  it fired on the next open's own slide-in and hid the drawer, leaving a
+  stuck `open` class. `closeDetailModal` now tears down both its listener
+  and fallback timer whichever fires first, and a close that lands before
+  the open's animation-frame `open` add cancels it.
+
 - **Add search never found TV shows** (e.g. *The Blue Planet*, 2001): the
   search used TMDB's movie-only endpoint and the lookup only ever fetched
   `/movie/{id}`. Search now uses `/search/multi` (movies + TV, up to 8

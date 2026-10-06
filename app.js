@@ -1152,12 +1152,16 @@
   // closeDetailModal) that hasn't finished yet when the drawer is reopened
   // — e.g. clicking a different card while the previous one is still
   // sliding shut — used to fire late and force-hide the *new*, freshly
-  // opened drawer out from under the user. It also left the "open" class
-  // stuck off (hidden=true, class already lacking "open") or the reverse,
-  // so the next open's classList.add("open") was sometimes a no-op and
-  // the drawer would snap into place with no slide-in animation. Cancel
-  // any pending close whenever a new open starts.
+  // opened drawer out from under the user. Cancel any pending close
+  // whenever a new open starts, so it can never fire against a drawer
+  // that's since been reopened.
   let cancelPendingDetailClose = () => {};
+
+  // Same idea for the open path: the "open" class is added two animation
+  // frames after opening. A close that lands inside that window used to be
+  // overtaken by the late add, leaving the hidden drawer with a stuck
+  // "open" class so the next open skipped its slide-in.
+  let openFrame = 0;
 
   function openDetailModal(id) {
     cancelPendingDetailClose();
@@ -1168,38 +1172,50 @@
     detailModal.hidden = false;
     // Double rAF so the browser paints the closed (translated-out) state
     // first, then the "open" class transition actually animates in.
-    requestAnimationFrame(() => requestAnimationFrame(() => detailModal.classList.add("open")));
+    cancelAnimationFrame(openFrame);
+    openFrame = requestAnimationFrame(() => {
+      openFrame = requestAnimationFrame(() => detailModal.classList.add("open"));
+    });
   }
 
   function closeDetailModal() {
     if (detailModal.hidden) return;
     cancelPendingDetailClose();
+    cancelAnimationFrame(openFrame);
     clearCardPreview();
     detailModal.classList.remove("open");
     const panel = detailModal.querySelector(".detail-modal");
-    const finish = () => {
+    detailModalOpenId = null;
+
+    if (!panel) {
       detailModal.hidden = true;
+      return;
+    }
+
+    // Whichever of these fires first must tear down *both* — a `finish()`
+    // that only cleared the one that triggered it (e.g. transitionend)
+    // left the other (the fallback timer) still armed, and left this
+    // transitionend listener attached to the panel indefinitely. That
+    // zombie listener would then catch the *next* open's own slide-in
+    // transitionend (same target, same "transform" property) and
+    // force-hide the drawer right after it finished opening.
+    let timer;
+    const onTransitionEnd = (e) => {
+      if (e.target === panel && e.propertyName === "transform") finish();
+    };
+    const finish = () => {
+      clearTimeout(timer);
+      panel.removeEventListener("transitionend", onTransitionEnd);
+      cancelPendingDetailClose = () => {};
+      detailModal.hidden = true;
+    };
+    panel.addEventListener("transitionend", onTransitionEnd);
+    timer = setTimeout(finish, 350); // fallback in case transitionend doesn't fire
+    cancelPendingDetailClose = () => {
+      clearTimeout(timer);
+      panel.removeEventListener("transitionend", onTransitionEnd);
       cancelPendingDetailClose = () => {};
     };
-    if (panel) {
-      // Only react to the panel's own slide transition finishing — a
-      // transitionend from some unrelated child (a button/pill hover
-      // transition, say) bubbles up too, and would otherwise fire this
-      // early and cut the close animation short.
-      const onTransitionEnd = (e) => {
-        if (e.target === panel && e.propertyName === "transform") finish();
-      };
-      const timer = setTimeout(finish, 350); // fallback in case transitionend doesn't fire
-      panel.addEventListener("transitionend", onTransitionEnd);
-      cancelPendingDetailClose = () => {
-        clearTimeout(timer);
-        panel.removeEventListener("transitionend", onTransitionEnd);
-        cancelPendingDetailClose = () => {};
-      };
-    } else {
-      finish();
-    }
-    detailModalOpenId = null;
   }
 
   function copyCardHtml(c) {
