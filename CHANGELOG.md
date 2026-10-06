@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-10-06]
+
 ### Added
 
 - **Movie/TV separation**, across both the Personal collection and the
@@ -39,6 +41,11 @@ than by individual session.
   on both tabs, the preview shows a "TV Series" pill and labels creators
   as "Creator", and the search box placeholder now mentions TV shows.
   See `tests/tvShowSearch.test.js`.
+
+## [2026-09-22]
+
+### Fixed
+
 - **Detail drawer flash-hide / no-animation-on-reopen, reproducible on
   desktop** (previously thought to be a touch-only glitch, see the
   2026-09-21 entries below — the earlier `@media (hover: hover)` fix only
