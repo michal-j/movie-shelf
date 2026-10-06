@@ -1,4 +1,4 @@
-# Movie Shelf — Handoff (current state, 2026-09-20)
+# Movie Shelf — Handoff (current state, 2026-10-06)
 
 This replaces the original migration-planning HANDOFF.md — that migration is
 done. This doc describes the app **as it actually is right now**, for a fresh
@@ -167,7 +167,7 @@ since the Supabase migration:
   by hand via SQL, this feature prevents new ones.
 - **"Multiple copies" filter**: a single boolean toggle chip in the filter
   panel (not a multi-option group — it's binary, so it didn't need one).
-- **Movie/TV-shows separation (2026-09-22)**: a "Type" filter group
+- **Movie/TV-shows separation (built 2026-09-22, merged 2026-10-06)**: a "Type" filter group
   (chips: Movies / TV Shows, multi-select OR like Format/Genre) in both
   tabs' filter panel, plus visible-without-filtering markers wherever a
   title appears: an always-on "TV" corner badge on grid cards (`.type-badge`,
@@ -711,7 +711,7 @@ Still deferred, in roughly the order the user raised them:
   by default, so both sessions' uncommitted edits land in the same files
   on disk simultaneously. Mid-session, one side noticed the mixed tree and
   safely split the other session's changes onto a scratch branch
-  (`tv-shows-filter`, a `WIP:` commit) before continuing its own fix on
+  (`tv-shows-filter`, a `WIP:` commit; since deleted) before continuing its own fix on
   `main`, rather than silently discarding or corrupting either side's
   work — a `git checkout` between branches in a shared directory swaps
   every session's working-tree files at once, so if you notice files you

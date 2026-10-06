@@ -22,9 +22,12 @@ vanilla JS app — no framework, no build step, no bundler.
   an IMDb ID, pick the right result, and the app pulls in a full
   TMDB+OMDb-merged preview before you confirm. No manual data entry for new
   titles.
+- Movies and TV shows live side by side in both the collection and the
+  watchlist: a "Type" filter (Movies / TV Shows) in the filter panel, and a
+  "TV" badge on posters, list rows, and in the detail drawer.
 - Grid and list views, word-boundary search, sortable/resizable list
-  columns, and a filter panel (decade, genre, country, format, watched
-  status, streaming availability, and more).
+  columns, and a filter panel (type, decade, genre, country, format,
+  watched status, streaming availability, and more).
 - A public demo mode with a curated, frozen subset of the real data —
   fully client-side, no backend calls, changes persist only in your own
   browser's `localStorage`.
@@ -73,7 +76,8 @@ npm test
 ```
 
 Runs the Vitest suite in `tests/` (jsdom), covering the filter panel, the
-Personal collection and Watchlist filtering, and the login page. This is
+Personal collection and Watchlist filtering (including the movie/TV type
+filter and badges), and the login page. This is
 dev tooling only — it doesn't add a build step to the app itself, which
 stays plain `<script>` tags with no bundler. See `HANDOFF.md` §9 for what's
 covered and what isn't.
