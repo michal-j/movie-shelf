@@ -11,23 +11,25 @@ All "Personal collection" cases use the fixture in `tests/fixtures/movies.js`
 (3 items) — a small, fixed dataset independent of the real app data, so
 these don't churn as the real collection grows. Everything here runs
 against the demo build of the app (`app.js` in `DEMO_MODE`) in a headless
-DOM, except the "Real app auth gate" section, which runs the real
-(non-demo) code path with a stubbed Supabase client.
+DOM, except the sections marked "(real app)", which run the real
+(non-demo) code path with a stubbed Supabase client, and the
+`/api/movie-search` / `/api/movie-lookup` cases, which call the serverless
+functions directly with a stubbed `fetch` (no real TMDB/OMDb traffic).
 
 **Fixture reference:**
 
-| Personal collection | Year | Genres | Country | Format | Watched | Copies |
-|---|---|---|---|---|---|---|
-| The Prefect Storm | 1994 | Drama, Thriller | United States | Blu-ray | Yes | 1 |
-| Second Sight | 1994 | Sci-Fi | United Kingdom | DVD | No | 2 |
-| Third Wheel | 1987 | Comedy | France | DVD | No | 1 |
-| Fourth Wall | 2011 | Drama, Comedy | United States, France | Blu-ray | Yes | 1 |
+| Personal collection | Year | Genres | Country | Format | Watched | Copies | Type |
+|---|---|---|---|---|---|---|---|
+| The Prefect Storm | 1994 | Drama, Thriller | United States | Blu-ray | Yes | 1 | Movie |
+| Second Sight | 1994 | Sci-Fi | United Kingdom | DVD | No | 2 | Movie |
+| Third Wheel | 1987 | Comedy | France | DVD | No | 1 | Movie |
+| Fourth Wall | 2011 | Drama, Comedy | United States, France | Blu-ray | Yes | 1 | TV |
 
-| Watchlist | Year | Genres | Country | Streaming |
-|---|---|---|---|---|
-| Awaiting Dawn | 2022 | Drama | United States | Netflix |
-| Backlog Blues | 1998 | Comedy | Germany | none |
-| Cue the Credits | 2005 | Drama, Thriller | United States, Germany | Apple TV Store |
+| Watchlist | Year | Genres | Country | Streaming | Type |
+|---|---|---|---|---|---|
+| Awaiting Dawn | 2022 | Drama | United States | Netflix | Movie |
+| Backlog Blues | 1998 | Comedy | Germany | none | TV |
+| Cue the Credits | 2005 | Drama, Thriller | United States, Germany | Apple TV Store | Movie |
 
 ---
 
@@ -80,6 +82,16 @@ in the filter grid.)*
 **Expected:** Decade, Genre, and Country filter groups are visible, and
 the Decade group actually has chips in it (not just an empty container).
 
+### shows the Type group, with both chips, on the Personal collection tab
+**Steps:** Load the app (Personal collection tab is the default).
+**Expected:** The Type filter group is visible, with exactly two chips:
+"movie" and "tv" (rendered as "Movies" / "TV Shows").
+
+### shows the Type group, with both chips, on the Watchlist tab too
+**Steps:** Switch to the Watchlist tab.
+**Expected:** Same as above — the Type group is visible with both chips,
+in the same spot in the filter grid as on the Personal collection tab.
+
 ---
 
 ## Personal collection filtering (`collectionFiltering.test.js`)
@@ -114,6 +126,12 @@ movie with more than one copy).
 **Steps:** Click the "France" country chip.
 **Expected:** Counter reads "2 movies": Third Wheel, Fourth Wall.
 
+### filters by media type
+**Steps:** Click the "TV Shows" chip. Toggle it off, then click "Movies."
+**Expected:** "TV Shows" shows 1 movie: Fourth Wall (the only fixture
+item with `mediaType: "tv"`). "Movies" shows 3 movies: The Prefect
+Storm, Second Sight, Third Wheel.
+
 ### filters by decade
 **Steps:** Click the "1990s" decade chip. Click it again to toggle it
 off. Click the "1980s" decade chip.
@@ -127,10 +145,11 @@ both 1994). After toggling off and picking "1980s," shows 1 movie
 Drama but not 1990s, so it's excluded).
 
 ### resets every filter via Clear all
-**Steps:** Click "Drama" (genre), "1990s" (decade), and "Watched"
-(status) chips. Click "Clear all."
-**Expected:** Counter reads "4 movies" again and the Watched-status
-group's "All" chip is active again.
+**Steps:** Click "Drama" (genre), "1990s" (decade), "Watched" (status),
+and "TV Shows" (type) chips. Click "Clear all."
+**Expected:** Counter reads "4 movies" again, the Watched-status group's
+"All" chip is active again, and the "TV Shows" type chip is no longer
+active.
 
 ### sorts by year, newest first
 **Steps:** Change the Sort dropdown to "Year (newest)."
@@ -160,6 +179,12 @@ Prefect Storm"), Third Wheel (1987).
 **Expected:** "2020s" shows 1 movie (Awaiting Dawn, 2022). "1990s" shows
 1 movie (Backlog Blues, 1998).
 
+### filters by media type
+**Steps:** Click the "TV Shows" chip. Toggle it off, then click "Movies."
+**Expected:** "TV Shows" shows 1 movie: Backlog Blues (the only fixture
+item with `mediaType: "tv"`). "Movies" shows 2 movies: Awaiting Dawn,
+Cue the Credits.
+
 ### filters by streaming availability
 **Steps:** Click "Yes" under Streaming available. Then click "No."
 **Expected:** "Yes" shows 2 movies (Awaiting Dawn, Cue the Credits —
@@ -171,10 +196,11 @@ only one with none).
 **Expected:** Counter reads "1 movie": Awaiting Dawn.
 
 ### resets every filter via Clear all
-**Steps:** Click "Drama" (genre) and "Yes" (streaming available). Click
-"Clear all."
-**Expected:** Counter reads "3 movies" again and the Streaming-available
-group's "All" chip is active again.
+**Steps:** Click "Drama" (genre), "Yes" (streaming available), and
+"TV Shows" (type). Click "Clear all."
+**Expected:** Counter reads "3 movies" again, the Streaming-available
+group's "All" chip is active again, and the "TV Shows" type chip is no
+longer active.
 
 ---
 
@@ -395,3 +421,38 @@ immediately.
 **Steps:** Load the real app where the movies query always returns 0 rows.
 **Expected:** The collection shows "0 movies," and the query ran exactly
 twice (the original attempt plus one retry, not an unbounded loop).
+
+---
+
+## Movie/TV badges and labels (`mediaType.test.js`)
+
+*(Fixture "Fourth Wall" in the collection and "Backlog Blues" in the
+watchlist are `mediaType: "tv"`; every other fixture item is a movie —
+see the fixture reference table at the top of this file.)*
+
+### shows an always-visible TV corner badge on a TV grid card, and none on a movie card
+**Steps:** Load the app (grid view, Personal collection tab).
+**Expected:** Fourth Wall's card has a "TV" corner badge. The Prefect
+Storm's card has none.
+
+### shows the TV corner badge on a watchlist grid card too
+**Steps:** Switch to the Watchlist tab (grid view).
+**Expected:** Backlog Blues' card has a "TV" corner badge. Awaiting
+Dawn's card has none.
+
+### shows an inline TV tag next to the title in list view, collection and watchlist
+**Steps:** Switch to list view on the Personal collection tab, then the
+Watchlist tab.
+**Expected:** Fourth Wall's and Backlog Blues' title cells show a small
+inline "TV" tag; other rows don't.
+
+### shows a 'TV Series' pill in the detail drawer for a TV item, and no pill for a movie
+**Steps:** Open Fourth Wall's detail drawer, then The Prefect Storm's.
+**Expected:** Fourth Wall's drawer shows a "TV Series" pill in the
+subline. The Prefect Storm's drawer shows none.
+
+### shows the 'Creator' label instead of 'Director' for a TV item in the drawer
+**Steps:** Open Fourth Wall's detail drawer (fixture has a director
+value set).
+**Expected:** The Credits section's term reads "Creator," not
+"Director."

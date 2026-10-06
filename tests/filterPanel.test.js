@@ -76,6 +76,12 @@ describe("filter panel groups shown per tab", () => {
     expect(hidden("filter-group-country")).toBe(false);
   });
 
+  it("shows the Type group, with both chips, on the Personal collection tab", () => {
+    expect(hidden("filter-group-type")).toBe(false);
+    const values = [...document.querySelectorAll("#filter-type .chip")].map((c) => c.dataset.value);
+    expect(values.sort()).toEqual(["movie", "tv"]);
+  });
+
   it("shows watchlist-only groups and hides collection-only groups on the Watchlist tab", () => {
     click("tab-watchlist");
 
@@ -96,5 +102,13 @@ describe("filter panel groups shown per tab", () => {
     expect(hidden("filter-group-genre")).toBe(false);
     expect(hidden("filter-group-country")).toBe(false);
     expect(document.getElementById("filter-decade").childElementCount).toBeGreaterThan(0);
+  });
+
+  it("shows the Type group, with both chips, on the Watchlist tab too", () => {
+    click("tab-watchlist");
+
+    expect(hidden("filter-group-type")).toBe(false);
+    const values = [...document.querySelectorAll("#filter-type .chip")].map((c) => c.dataset.value);
+    expect(values.sort()).toEqual(["movie", "tv"]);
   });
 });

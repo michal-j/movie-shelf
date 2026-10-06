@@ -318,6 +318,9 @@ img { max-width: 100%; }
 .filter-group-streaming-service { grid-column: 3 / 5; grid-row: 2; }
 .filter-group-genre { grid-column: 1 / 3; grid-row: 3; }
 .filter-group-country { grid-column: 3 / 5; grid-row: 3; }
+/* Shared by both tabs, like Decade/Genre/Country — its own row rather than
+   reusing an existing cell, so it never has to fight either tab's layout. */
+.filter-group-type { grid-column: 1; grid-row: 4; }
 .filter-group-label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; max-width: 480px; }
@@ -412,6 +415,37 @@ main#content { padding: 20px; }
 }
 
 .poster-no-streaming { filter: grayscale(1); opacity: 0.55; }
+
+/* Always-visible corner tag (like .watched-badge, opposite corner) so TV
+   titles read as such while just scanning the grid, not only on hover. */
+.type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(15,16,20,0.78);
+  backdrop-filter: blur(4px);
+  color: #5eead4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.type-tag-inline {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(94,234,212,0.15);
+  color: #5eead4;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
 
 .streaming-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .streaming-icon { width: 20px; height: 20px; border-radius: 4px; overflow: hidden; background: #20232b; flex-shrink: 0; }
@@ -735,6 +769,7 @@ main#content { padding: 20px; }
 .detail-subline span:not(.pill):not(:last-child)::after { content: "·"; margin-left: 6px; color: var(--text-faint); }
 .pill { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
 .pill.gold { color: #f4c752; border-color: #4a3c1c; }
+.pill-type-tv { color: #5eead4; border-color: rgba(94,234,212,0.35); }
 
 .detail-actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 
@@ -953,7 +988,7 @@ main#content { padding: 20px; }
   .filter-panel-inner { grid-template-columns: 1fr; }
   .filter-group-watched, .filter-group-format, .filter-group-decade,
   .filter-group-copies, .filter-group-genre, .filter-group-country,
-  .filter-group-streaming-available, .filter-group-streaming-service {
+  .filter-group-type, .filter-group-streaming-available, .filter-group-streaming-service {
     grid-column: 1;
     grid-row: auto;
   }

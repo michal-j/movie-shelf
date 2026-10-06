@@ -45,5 +45,7 @@ export const movies = [
     watched: true,
     copies: [{ format: "Blu-ray" }],
     imdbRating: 8.1,
+    mediaType: "tv",
+    director: ["Fourth Wall Creator"],
   },
 ];

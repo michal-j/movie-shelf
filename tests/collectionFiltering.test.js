@@ -68,6 +68,17 @@ describe("Personal collection filtering", () => {
     expect(cardTitles().sort()).toEqual(["Fourth Wall", "Third Wheel"]);
   });
 
+  it("filters by media type", () => {
+    clickChip("filter-type", "tv");
+    expect(counterText()).toBe("1 movie");
+    expect(cardTitles()).toEqual(["Fourth Wall"]);
+
+    clickChip("filter-type", "tv"); // toggle back off
+    clickChip("filter-type", "movie");
+    expect(counterText()).toBe("3 movies");
+    expect(cardTitles().sort()).toEqual(["Second Sight", "The Prefect Storm", "Third Wheel"]);
+  });
+
   it("filters by decade", () => {
     clickChip("filter-decade", "1990s");
     expect(counterText()).toBe("2 movies");
@@ -90,10 +101,12 @@ describe("Personal collection filtering", () => {
     clickChip("filter-genre", "Drama");
     clickChip("filter-decade", "1990s");
     clickChip("filter-watched", "watched");
+    clickChip("filter-type", "tv");
     document.getElementById("filter-clear-btn").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
     expect(counterText()).toBe("4 movies");
     expect(document.querySelector('#filter-watched .chip[data-value="all"]').classList.contains("active")).toBe(true);
+    expect(document.querySelector('#filter-type .chip[data-value="tv"]').classList.contains("active")).toBe(false);
   });
 
   it("sorts by year, newest first", () => {

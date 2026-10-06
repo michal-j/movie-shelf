@@ -55,6 +55,17 @@ describe("Watchlist filtering", () => {
     expect(cardTitles()).toEqual(["Backlog Blues"]);
   });
 
+  it("filters by media type", () => {
+    clickChip("filter-type", "tv");
+    expect(counterText()).toBe("1 movie");
+    expect(cardTitles()).toEqual(["Backlog Blues"]);
+
+    clickChip("filter-type", "tv"); // toggle off
+    clickChip("filter-type", "movie");
+    expect(counterText()).toBe("2 movies");
+    expect(cardTitles().sort()).toEqual(["Awaiting Dawn", "Cue the Credits"]);
+  });
+
   it("filters by streaming availability", () => {
     clickChip("filter-streaming-available", "yes");
     expect(counterText()).toBe("2 movies");
@@ -74,11 +85,13 @@ describe("Watchlist filtering", () => {
   it("resets every filter via Clear all", () => {
     clickChip("filter-genre", "Drama");
     clickChip("filter-streaming-available", "yes");
+    clickChip("filter-type", "tv");
     click("filter-clear-btn");
 
     expect(counterText()).toBe("3 movies");
     expect(
       document.querySelector('#filter-streaming-available .chip[data-value="all"]').classList.contains("active")
     ).toBe(true);
+    expect(document.querySelector('#filter-type .chip[data-value="tv"]').classList.contains("active")).toBe(false);
   });
 });

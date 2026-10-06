@@ -9,6 +9,25 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **Movie/TV separation**, across both the Personal collection and the
+  Watchlist: a new "Type" filter group (Movies / TV Shows) in the same
+  spot in the filter panel on both tabs, plus a "TV" badge/tag so it's
+  visible without opening a filter — an always-on corner tag on grid
+  cards, an inline tag next to the title in list view, and a "TV Series"
+  pill in the detail drawer. `movies` (the personal-collection table)
+  gets a new `media_type` column (`'movie'` default, `'tv'` check
+  constraint), mirroring the one `watchlist` already had; the two Mortal
+  Kombat DVDs documented as Polish TV-content releases (see §5) were
+  backfilled to `'tv'`. The existing `mediaType === "tv" ? "Creator" :
+  "Director"` credits-label logic (previously only ever true for
+  watchlist rows, since collection rows had no `media_type` column at
+  all) now also applies correctly to collection TV rows. See
+  `tests/mediaType.test.js` and the Type-filter cases added to
+  `collectionFiltering.test.js`/`watchlistFiltering.test.js`/
+  `filterPanel.test.js`.
+
 ### Fixed
 
 - **Detail drawer flash-hide / no-animation-on-reopen, reproducible on

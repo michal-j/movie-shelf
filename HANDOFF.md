@@ -165,26 +165,49 @@ since the Supabase migration:
   by hand via SQL, this feature prevents new ones.
 - **"Multiple copies" filter**: a single boolean toggle chip in the filter
   panel (not a multi-option group — it's binary, so it didn't need one).
-- **Filter panel layout (reworked 2026-09-20)**: `.filter-panel-inner` is an
-  explicit 4-column × 2-row CSS grid (`styles.css`), not flex-wrap or
-  auto-placed grid. Every `.filter-group-*` class gets a hardcoded
-  `grid-column`/`grid-row` — deliberately, for two reasons: (1) Country and
-  Streaming service can grow very long (expand-to-show-all), and auto-flow
-  would stretch every group sharing their row to match, which is exactly
-  the bug that motivated this rework; (2) filters shared between tabs
-  (Decade/Genre/Country) need to land in the identical cell in both views,
-  which isn't guaranteed once a different number of groups are hidden per
-  tab. Current layout:
+- **Movie/TV-shows separation (2026-09-22)**: a "Type" filter group
+  (chips: Movies / TV Shows, multi-select OR like Format/Genre) in both
+  tabs' filter panel, plus visible-without-filtering markers wherever a
+  title appears: an always-on "TV" corner badge on grid cards (`.type-badge`,
+  opposite corner from the collection's watched-badge), an inline "TV" tag
+  next to the title in list view (`.type-tag-inline`), and a "TV Series"
+  pill in the detail drawer's subline (`.pill-type-tv`) — all keyed off
+  `movie.mediaType === "tv"`, shown only for TV (absence of a badge means
+  movie, matching how the existing "Multiple copies"/format pills already
+  behave). `movies` (personal collection) got a new `media_type` column to
+  match `watchlist`'s (see §5) — before this, the collection had no way to
+  represent a TV item at all, and the `mediaType === "tv" ? "Creator" :
+  "Director"` label logic in the Credits section (added for watchlist,
+  2026-09-16) could never actually fire for a collection row. As of
+  2026-10-06 the app's own add-flow (search/lookup) also finds TV shows
+  and inserts them with `mediaType: "tv"` on both tabs — see the
+  Watchlist entry below for how search/lookup handle TV.
+- **Filter panel layout (reworked 2026-09-20, extended 2026-09-22)**:
+  `.filter-panel-inner` is an explicit 4-column × 3-row CSS grid
+  (`styles.css`), not flex-wrap or auto-placed grid. Every
+  `.filter-group-*` class gets a hardcoded `grid-column`/`grid-row` —
+  deliberately, for two reasons: (1) Country and Streaming service can
+  grow very long (expand-to-show-all), and auto-flow would stretch every
+  group sharing their row to match, which is exactly the bug that
+  motivated this rework; (2) filters shared between tabs
+  (Decade/Genre/Country/Type) need to land in the identical cell in both
+  views, which isn't guaranteed once a different number of groups are
+  hidden per tab. Current layout:
   - Row 1: Watched status, Decade, Format, Copies (Personal collection) /
     Streaming available, Decade, Streaming service — spans 2 columns —
     (Watchlist). Watched status/Streaming available share column 1;
     Format/Copies' cells are reused by Streaming service's 2-column span,
     since collection-only and watchlist-only groups never show together.
   - Row 2 (both tabs): Genre (spans 2 cols), Country (spans 2 cols).
+  - Row 3 (both tabs): Type (column 1 only — just two chips, doesn't need
+    more room). Added 2026-09-22 for the movie/TV-shows separation
+    feature; given its own row rather than folded into an existing cell
+    so it never has to fight either tab's row-1/row-2 layout.
   - Visibility per tab is still `data-view="collection"|"watchlist"` on
     each `.filter-group`, toggled by `applyFilterPanelView()` in app.js —
     unchanged mechanism, just now also determines which group "owns" a
-    shared grid cell.
+    shared grid cell. Type has no `data-view` at all (like Decade/Genre/
+    Country) since it's shared by both tabs.
   - Below 640px the grid collapses to a single stacked column (see the
     `@media (max-width: 640px)` override) — every explicit
     `grid-column`/`grid-row` gets reset to flow naturally.
@@ -368,8 +391,9 @@ since the Supabase migration:
   suppressed in some embedded/automated browser contexts and made both
   look broken during testing.
   A TV row's Credits section shows "Creator" instead of "Director" (keyed
-  off `media_type === 'tv'`; collection rows have no `media_type` column at
-  all, so this only ever fires for watchlist TV entries).
+  off `media_type === 'tv'`). As of 2026-09-22 the collection also has a
+  `media_type` column (see §5), so this now fires there too, not just for
+  watchlist entries — see the movie/TV-shows separation feature above.
   **Demo mode supports the Watchlist tab too** (added 2026-09-16) —
   `demo.html` mirrors `index.html`'s markup, backed by a frozen
   `data/watchlist-demo.json` (14 titles, a 7/7 streamable split plus one TV
@@ -391,6 +415,8 @@ imdb_id, imdb_link, title, original_title, original_language, format,
 edition, aspect_ratio text,
 tmdb_id, year, imdb_votes, metascore, runtime_minutes, collection_number integer,
 imdb_rating numeric,
+media_type text not null default 'movie',  -- 'movie' | 'tv', check constraint
+                                            -- added 2026-09-22, mirrors watchlist's
 genres, countries, director, writers, cast_members, studios,
 audio_languages, subtitle_languages, copies jsonb (not null default '[]'),
 has_extras, watched boolean,
@@ -427,11 +453,13 @@ columns to the camelCase shape the rest of the file (and originally the
 static JSON prototype) uses — e.g. `cast:cast_members` in the select alias.
 If you add a DB column, it needs an entry in both places to round-trip.
 
-**Current data state:** 557 movies, 424 watched. 2 movies (Mortal Kombat:
-Conquest / Final Battle) intentionally have no IMDb/TMDB entry — Polish DVD
-releases of TV content, user said leave as-is, don't "fix" this. ~47 movies
-have no Metascore — legitimately absent on OMDb for those titles, not a
-data gap. Everything else was backfilled from OMDb already.
+**Current data state:** 557 movies, 424 watched (2 of the 557 are
+`media_type = 'tv'`: Mortal Kombat: Conquest / Final Battle, backfilled
+2026-09-22 — see below). 2 movies (Mortal Kombat: Conquest / Final Battle)
+intentionally have no IMDb/TMDB entry — Polish DVD releases of TV content,
+user said leave as-is, don't "fix" this. ~47 movies have no Metascore —
+legitimately absent on OMDb for those titles, not a data gap. Everything
+else was backfilled from OMDb already.
 
 **`public.watchlist`** (added 2026-09-15): same RLS pattern as `movies`
 (same hardcoded owner UUID), same TMDB-shaped columns minus everything
@@ -670,6 +698,22 @@ Still deferred, in roughly the order the user raised them:
   regression coverage (the auto-hide half reproduces reliably there with
   real timers; the "no animation" half doesn't, since jsdom doesn't run
   real CSS transitions).
+- **(2026-09-22) Two Claude Code sessions can end up editing this repo's
+  working directory at the same time** (e.g. one user window on a drawer
+  bug, another on this movie/TV feature) — there's no worktree isolation
+  by default, so both sessions' uncommitted edits land in the same files
+  on disk simultaneously. Mid-session, one side noticed the mixed tree and
+  safely split the other session's changes onto a scratch branch
+  (`tv-shows-filter`, a `WIP:` commit) before continuing its own fix on
+  `main`, rather than silently discarding or corrupting either side's
+  work — a `git checkout` between branches in a shared directory swaps
+  every session's working-tree files at once, so if you notice files you
+  just edited have reverted, check `git reflog` and `git branch` for a
+  recent branch/commit before assuming something broke; the other
+  session's changes are very likely sitting safely in a commit, not lost.
+  If you find yourself in that situation, avoid `git checkout` yourself
+  (it would yank the *other* session's in-progress files this time) —
+  recover with `git show <commit>:<path>` per file instead.
 
 ---
 
@@ -703,9 +747,11 @@ which is still plain `<script>` tags with zero bundling.
   which filter groups show per tab (this is what would have caught the
   Decade-deleted-instead-of-moved mistake, see §8 and
   `filterPanel.test.js`'s regression test), Personal collection filtering
-  (search/watched/format/copies/genre/country/decade, combined filters,
-  Clear all, sorting), Watchlist filtering (genre/country/decade/streaming
-  available/streaming service, Clear all), the login page's structure and
+  (search/watched/format/copies/genre/country/decade/type, combined
+  filters, Clear all, sorting), Watchlist filtering (genre/country/decade/
+  type/streaming available/streaming service, Clear all), the movie/TV
+  badges and labels across grid, list, and detail drawer
+  (`mediaType.test.js`), the login page's structure and
   its sign-in success/error handling, the real app's auth gate
   (`authGate.test.js` — the app shell stays hidden with no session, and
   is revealed once one's confirmed; this is the regression test for the

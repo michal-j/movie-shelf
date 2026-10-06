@@ -31,7 +31,7 @@
   // works with the same camelCase shape the old static JSON used, so the
   // select aliases columns back to camelCase and writes go through this map.
   const SELECT_COLUMNS = [
-    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "title",
+    "id", "imdbId:imdb_id", "imdbLink:imdb_link", "tmdbId:tmdb_id", "mediaType:media_type", "title",
     "originalTitle:original_title", "originalLanguage:original_language", "year",
     "imdbRating:imdb_rating", "imdbVotes:imdb_votes", "metascore", "runtimeMinutes:runtime_minutes",
     "genres", "countries", "director", "writers", "cast:cast_members", "studios",
@@ -42,7 +42,7 @@
   ].join(", ");
 
   const CAMEL_TO_DB_COLUMN = {
-    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", title: "title",
+    id: "id", imdbId: "imdb_id", imdbLink: "imdb_link", tmdbId: "tmdb_id", mediaType: "media_type", title: "title",
     originalTitle: "original_title", originalLanguage: "original_language", year: "year",
     imdbRating: "imdb_rating", imdbVotes: "imdb_votes", metascore: "metascore",
     runtimeMinutes: "runtime_minutes", genres: "genres", countries: "countries",
@@ -187,12 +187,14 @@
       decades: new Set(),
       genres: new Set(),
       countries: new Set(),
+      types: new Set(), // subset of "movie" | "tv"
       multiCopy: false,
     },
     watchlistFilters: {
       decades: new Set(),
       genres: new Set(),
       countries: new Set(),
+      types: new Set(), // subset of "movie" | "tv"
       streamingAvailable: "all", // all | yes | no
       streamingServices: new Set(),
     },
@@ -249,6 +251,10 @@
         const res = await fetch("data/movies-demo.json");
         state.allMovies = await res.json();
       }
+      // movies-demo.json predates the media_type column and locally-cached
+      // saves may too — default missing values to "movie" like the real
+      // column's DB default does.
+      state.allMovies = state.allMovies.map((m) => ({ mediaType: "movie", ...m }));
 
       const savedWatchlist = loadJSON(STORAGE_KEYS.demoWatchlist, null);
       if (savedWatchlist) {
@@ -329,6 +335,9 @@
   }
 
   // ---------- Filter chip construction ----------
+  const MEDIA_TYPE_LABELS = { movie: "Movies", tv: "TV Shows" };
+  const mediaTypeLabel = (value) => MEDIA_TYPE_LABELS[value] || value;
+
   function buildFilterChips() {
     const movies = allMovies();
     const formats = uniqueSorted(movies.map((m) => m.format).filter(Boolean));
@@ -348,6 +357,7 @@
       decades.map((d) => `${d}s`),
       state.filters.decades
     );
+    renderChipGroup("filter-type", ["movie", "tv"], state.filters.types, mediaTypeLabel);
 
     if (!filterPanel.hidden) setupCollapsibleChipRow("filter-country", "filter-country-toggle");
   }
@@ -372,6 +382,7 @@
       decades.map((d) => `${d}s`),
       state.watchlistFilters.decades
     );
+    renderChipGroup("filter-type", ["movie", "tv"], state.watchlistFilters.types, mediaTypeLabel);
     renderChipGroup("filter-streaming-service", services, state.watchlistFilters.streamingServices);
 
     if (!filterPanel.hidden) {
@@ -410,7 +421,7 @@
     return [...new Set(arr)].sort();
   }
 
-  function renderChipGroup(containerId, values, activeSet) {
+  function renderChipGroup(containerId, values, activeSet, labelFor) {
     const container = el(containerId);
     container.innerHTML = "";
     values.forEach((value) => {
@@ -418,7 +429,7 @@
       btn.className = "chip" + (activeSet.has(value) ? " active" : "");
       btn.type = "button";
       btn.dataset.value = value;
-      btn.textContent = value;
+      btn.textContent = labelFor ? labelFor(value) : value;
       btn.addEventListener("click", () => {
         if (activeSet.has(value)) activeSet.delete(value);
         else activeSet.add(value);
@@ -509,6 +520,9 @@
         return state.filters.decades.has(decade);
       });
     }
+    if (state.filters.types.size) {
+      list = list.filter((m) => state.filters.types.has(m.mediaType || "movie"));
+    }
 
     return sortMovies(list, state.sort);
   }
@@ -582,6 +596,9 @@
         return state.watchlistFilters.decades.has(decade);
       });
     }
+    if (state.watchlistFilters.types.size) {
+      list = list.filter((m) => state.watchlistFilters.types.has(m.mediaType || "movie"));
+    }
     if (state.watchlistFilters.streamingAvailable !== "all") {
       const wantAvailable = state.watchlistFilters.streamingAvailable === "yes";
       list = list.filter((m) => ((m.streamingProviders || []).length > 0) === wantAvailable);
@@ -643,6 +660,7 @@
       state.filters.genres.size +
       state.filters.countries.size +
       state.filters.decades.size +
+      state.filters.types.size +
       (state.filters.multiCopy ? 1 : 0);
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
@@ -651,7 +669,7 @@
   function updateWatchlistFilterBadge() {
     const f = state.watchlistFilters;
     const count =
-      (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.streamingServices.size;
+      (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.types.size + f.streamingServices.size;
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
   }
@@ -675,6 +693,20 @@
     div.style.background = gradientFor(movie.title || "?");
     div.textContent = movie.title || "Untitled";
     return div;
+  }
+
+  // Always-visible corner tag (unlike .card-overlay, which only shows on
+  // hover/preview) so TV titles read as such while just scanning the grid.
+  function typeBadgeNode() {
+    const badge = document.createElement("div");
+    badge.className = "type-badge";
+    badge.title = "TV series";
+    badge.textContent = "TV";
+    return badge;
+  }
+
+  function typeTagHtml(movie) {
+    return movie.mediaType === "tv" ? `<span class="type-tag-inline">TV</span>` : "";
   }
 
   function metascoreClass(score) {
@@ -766,6 +798,8 @@
         card.appendChild(watchedBadge);
       }
 
+      if (movie.mediaType === "tv") card.appendChild(typeBadgeNode());
+
       const overlay = document.createElement("div");
       overlay.className = "card-overlay";
       overlay.innerHTML = `
@@ -812,6 +846,8 @@
       const poster = posterNode(movie, "poster");
       if (!hasStreaming) poster.classList.add("poster-no-streaming");
       card.appendChild(poster);
+
+      if (movie.mediaType === "tv") card.appendChild(typeBadgeNode());
 
       const overlay = document.createElement("div");
       overlay.className = "card-overlay";
@@ -916,7 +952,7 @@
       row.innerHTML = `
         <div class="row-watched-slot"></div>
         <div class="row-poster-slot"></div>
-        <div class="row-cell row-title">${escapeHtml(movie.title)}</div>
+        <div class="row-cell row-title">${typeTagHtml(movie)}${escapeHtml(movie.title)}</div>
         ${visibleColumns.map((c) => listCellHtml(c, movie)).join("")}
       `;
       row.querySelector(".row-poster-slot").replaceWith(posterWrap);
@@ -1015,7 +1051,7 @@
 
       row.innerHTML = `
         <div class="row-poster-slot"></div>
-        <div class="row-cell row-title">${escapeHtml(movie.title)}</div>
+        <div class="row-cell row-title">${typeTagHtml(movie)}${escapeHtml(movie.title)}</div>
         ${visibleColumns.map((c) => listCellHtml(c, movie)).join("")}
       `;
       row.querySelector(".row-poster-slot").replaceWith(posterWrap);
@@ -1203,6 +1239,7 @@
           <h2 class="detail-title">${escapeHtml(movie.title)}</h2>
           ${movie.originalTitle && movie.originalTitle !== movie.title ? `<p class="detail-original">${escapeHtml(movie.originalTitle)}</p>` : ""}
           <div class="detail-subline">
+            ${movie.mediaType === "tv" ? `<span class="pill pill-type-tv">TV Series</span>` : ""}
             ${movie.year ? `<span>${movie.year}</span>` : ""}
             ${movie.runtimeMinutes ? `<span>${movie.runtimeMinutes} min</span>` : ""}
             ${!isWatchlistItem && movie.format && (movie.copies || []).length <= 1 ? `<span class="pill">${escapeHtml(movie.format)}</span>` : ""}
@@ -1751,6 +1788,9 @@
 
     const newMovie = {
       id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      // The app's own search/add flow only resolves movies on TMDB — see the
+      // identical note in confirmAddToWatchlist().
+      mediaType: "movie",
       title: selectedMovie.title,
       originalTitle: selectedMovie.originalTitle || selectedMovie.title,
       originalLanguage: selectedMovie.originalLanguage || null,
@@ -2165,6 +2205,7 @@
     state.filters.genres.clear();
     state.filters.countries.clear();
     state.filters.decades.clear();
+    state.filters.types.clear();
     state.filters.multiCopy = false;
     document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.value === "all"));
     render();
@@ -2174,6 +2215,7 @@
     state.watchlistFilters.genres.clear();
     state.watchlistFilters.countries.clear();
     state.watchlistFilters.decades.clear();
+    state.watchlistFilters.types.clear();
     state.watchlistFilters.streamingAvailable = "all";
     state.watchlistFilters.streamingServices.clear();
     document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.value === "all"));

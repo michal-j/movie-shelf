@@ -15,6 +15,7 @@ export const watchlist = [
     genres: ["Comedy"],
     countries: ["Germany"],
     streamingProviders: [],
+    mediaType: "tv",
   },
   {
     id: "w3",
