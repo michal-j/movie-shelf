@@ -53,8 +53,10 @@ supabaseClient.js    — creates window.supabaseClient (URL + publishable
 styles.css           — one shared stylesheet for everything, dark theme
 favicon.svg
 api/movie-search.js  — Vercel serverless fn: TMDB-only live title search
+                        (movies AND TV shows, via /search/multi)
 api/movie-lookup.js  — Vercel serverless fn: full TMDB+OMDb merge for one
-                        movie, by imdbId / tmdbId / title+year
+                        movie or TV show, by imdbId / tmdbId+mediaType /
+                        title+year
 data/movies.json     — historical full export, NOT used by the running
                         app anymore (kept for reference / re-running the
                         pipeline scripts). 545 rows, frozen.
@@ -373,10 +375,20 @@ since the Supabase migration:
   `public.watchlist` (see §5), not by a flag on `movies` — owning a copy of
   something never removes it from the watchlist. Adding works the same TMDB
   search-as-you-type flow as Add-movie, minus the format step (watchlist
-  items have no copies), but it's **movie-only today**: the search box only
-  resolves TMDB movies. TV shows currently only get into the watchlist via
-  a manual/bulk import (see §5) — extending the live search to also find TV
-  shows is deferred, see §6. Adding a title that's already in the watchlist
+  items have no copies). **Search covers TV shows too** (fixed
+  2026-10-06 — it used to be movie-only, so e.g. *The Blue Planet* (2001)
+  could never be found): `/api/movie-search` uses TMDB's `/search/multi`
+  (people filtered out, up to 8 results, each tagged with `mediaType`, TV
+  results show a "TV" tag in the picker), and `/api/movie-lookup` takes
+  `tmdbId` **plus** `mediaType` — TMDB movie and TV ids are separate
+  namespaces, so a bare tmdbId is ambiguous (it defaults to `movie` for
+  backwards compatibility). IMDb-ID lookups fall back to `tv_results`
+  when `movie_results` is empty. For TV, the lookup maps `name`/
+  `first_air_date`/`episode_run_time`, takes OMDb's year range's start
+  year ("2001–2002" → 2001), and fills `director` from TMDB `created_by`
+  (OMDb has no director for series) — the preview and drawer label it
+  "Creator". The same applies to Add-movie on the collection tab. Adding
+  a title that's already in the watchlist
   (matched by IMDb ID) disables the confirm button with a "This is already
   in your watchlist." notice instead of creating a duplicate row.
   Each watchlist item caches TMDB/JustWatch streaming availability for
@@ -524,11 +536,6 @@ Still deferred, in roughly the order the user raised them:
    redesign Edit without that conversation happening first.
 3. **`data/movies-demo.json` going stale** (§3) — known, not important per
    the user, no action needed unless asked.
-4. **TV show search in the Add-to-watchlist flow**: the live search box
-   only resolves TMDB movies today (see §4). TV shows currently only enter
-   the watchlist via manual/bulk import. Extending the search-as-you-type
-   flow (and its preview/confirm UI) to also find and add TV shows is
-   deferred. Not started.
 
 ---
 

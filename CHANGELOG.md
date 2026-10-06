@@ -30,6 +30,15 @@ than by individual session.
 
 ### Fixed
 
+- **Add search never found TV shows** (e.g. *The Blue Planet*, 2001): the
+  search used TMDB's movie-only endpoint and the lookup only ever fetched
+  `/movie/{id}`. Search now uses `/search/multi` (movies + TV, up to 8
+  results, TV ones tagged "TV" in the picker), and lookup resolves TV by
+  `tmdbId` + `mediaType`, or via TMDB's `tv_results` for a pasted IMDb
+  ID. TV shows added through the app are saved with `media_type = 'tv'`
+  on both tabs, the preview shows a "TV Series" pill and labels creators
+  as "Creator", and the search box placeholder now mentions TV shows.
+  See `tests/tvShowSearch.test.js`.
 - **Detail drawer flash-hide / no-animation-on-reopen, reproducible on
   desktop** (previously thought to be a touch-only glitch, see the
   2026-09-21 entries below — the earlier `@media (hover: hover)` fix only

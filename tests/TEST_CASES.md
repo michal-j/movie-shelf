@@ -456,3 +456,46 @@ subline. The Prefect Storm's drawer shows none.
 value set).
 **Expected:** The Credits section's term reads "Creator," not
 "Director."
+
+---
+
+## TV shows in the Add search (`tvShowSearch.test.js`)
+
+Regression coverage for "the Add search never finds TV shows" — reported
+with *The Blue Planet* (2001, TMDB `tv/13579`, IMDb `tt0296310`), which is
+the stubbed title used throughout.
+
+### /api/movie-search: returns TV shows alongside movies, with mediaType, and drops people
+**Steps:** Call the search function for "The Blue Planet" with a stubbed
+TMDB `/search/multi` response holding a TV show, a person and a movie.
+**Expected:** It queries `/search/multi`; the result is the TV show
+(title from `name`, year from `first_air_date`, `mediaType: "tv"`) and the
+movie (`mediaType: "movie"`) — no person.
+
+### /api/movie-lookup: fetches /tv/{id} when given tmdbId + mediaType=tv, mapping TV fields
+**Steps:** Look up `tmdbId=13579&mediaType=tv`; OMDb returns a series
+with year "2001–2001" and Director/Runtime "N/A".
+**Expected:** Only `/tv/13579` is fetched (never `/movie/...`). Result has
+`mediaType: "tv"`, year 2001, runtime 50 (from `episode_run_time`), and
+`director` = the TMDB creator.
+
+### /api/movie-lookup: resolves an IMDb ID via tv_results when it has no movie match
+**Steps:** Look up `imdbId=tt0296310`; TMDB `/find` returns no
+`movie_results` but one `tv_results` entry.
+**Expected:** Resolves to the TV show (`mediaType: "tv"`).
+
+### /api/movie-lookup: still defaults a bare tmdbId to a movie (backwards compatible)
+**Steps:** Look up `tmdbId=389` with no `mediaType`.
+**Expected:** Fetches `/movie/389`, never `/tv/...`; `mediaType: "movie"`.
+
+### /api/movie-lookup: rejects an unknown mediaType
+**Steps:** Look up `tmdbId=1&mediaType=person`.
+**Expected:** HTTP 400.
+
+### Add flow with a TV show result (real app): shows a TV tag in results, looks it up as TV, and saves it to the watchlist as mediaType tv
+**Steps:** Signed in, switch to the Watchlist tab, click "Add to
+watchlist", type "The Blue Planet", pick the (TV) result, confirm.
+**Expected:** The result row shows a "TV" tag; the lookup request carries
+`tmdbId=13579&mediaType=tv`; the preview shows a "TV Series" pill and a
+"Creator:" line (not "Director:"); the inserted watchlist row has
+`media_type: "tv"`.

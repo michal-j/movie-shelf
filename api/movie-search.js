@@ -5,6 +5,12 @@
 // tighter free-tier quota (1000/day) safe from being burned by every
 // keystroke or every wrong guess.
 //
+// Searches movies AND TV shows together (TMDB's /search/multi, which ranks
+// both by relevance in one list) — TV shows are first-class titles in this
+// app, not a lesser category, so the picker must surface them too. Each
+// result carries its mediaType, because TMDB movie and TV ids are separate
+// namespaces: /api/movie-lookup needs it to fetch the right record.
+//
 // GET /api/movie-search?title=star+wars
 
 const SUPABASE_URL = "https://ybfxyrzkdexjjptuzzuy.supabase.co";
@@ -43,19 +49,28 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const url = new URL("https://api.themoviedb.org/3/search/movie");
+    const url = new URL("https://api.themoviedb.org/3/search/multi");
     url.searchParams.set("api_key", TMDB_API_KEY);
     url.searchParams.set("query", title);
     const tmdbRes = await fetch(url);
     if (!tmdbRes.ok) throw new Error(`TMDB search failed: ${tmdbRes.status}`);
     const data = await tmdbRes.json();
 
-    const results = (data.results || []).slice(0, 5).map((m) => ({
-      tmdbId: m.id,
-      title: m.title,
-      year: m.release_date ? Number(m.release_date.slice(0, 4)) : null,
-      posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w200${m.poster_path}` : null,
-    }));
+    // /search/multi also returns people — drop those. 8 rather than the old
+    // movie-only 5, since movies and TV shows now compete for the slots.
+    const results = (data.results || [])
+      .filter((m) => m.media_type === "movie" || m.media_type === "tv")
+      .slice(0, 8)
+      .map((m) => {
+        const date = m.media_type === "tv" ? m.first_air_date : m.release_date;
+        return {
+          tmdbId: m.id,
+          mediaType: m.media_type,
+          title: m.media_type === "tv" ? m.name : m.title,
+          year: date ? Number(date.slice(0, 4)) : null,
+          posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w200${m.poster_path}` : null,
+        };
+      });
 
     res.status(200).json({ results });
   } catch (err) {

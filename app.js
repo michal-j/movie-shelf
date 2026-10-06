@@ -1423,7 +1423,7 @@
         <div class="search-result-poster">${r.posterUrl ? `<img src="${escapeHtml(r.posterUrl)}" alt="">` : ""}</div>
         <div class="search-result-text">
           <div class="search-result-title">${escapeHtml(r.title)}</div>
-          <div class="search-result-year">${r.year || "—"}</div>
+          <div class="search-result-year">${r.mediaType === "tv" ? `<span class="type-tag-inline">TV</span>` : ""}${r.year || "—"}</div>
         </div>
       </button>
     `
@@ -1439,7 +1439,8 @@
     setSearchStatus("Loading details…");
     try {
       const { data: { session } } = await window.supabaseClient.auth.getSession();
-      const res = await fetch(`/api/movie-lookup?tmdbId=${result.tmdbId}`, {
+      // tmdbId alone is ambiguous — TMDB movie and TV ids are separate namespaces.
+      const res = await fetch(`/api/movie-lookup?tmdbId=${result.tmdbId}&mediaType=${result.mediaType === "tv" ? "tv" : "movie"}`, {
         headers: { Authorization: `Bearer ${session?.access_token || ""}` },
       });
       const data = await res.json();
@@ -1505,6 +1506,7 @@
         <p class="movie-preview-title">${escapeHtml(data.title)}</p>
         ${data.originalTitle && data.originalTitle !== data.title ? `<p class="movie-preview-original">${escapeHtml(data.originalTitle)}</p>` : ""}
         <div class="movie-preview-subline">
+          ${data.mediaType === "tv" ? `<span class="pill pill-type-tv">TV Series</span>` : ""}
           ${data.year ? `<span>${data.year}</span>` : ""}
           ${data.runtimeMinutes ? `<span>${data.runtimeMinutes} min</span>` : ""}
           ${data.metascore != null ? `<span class="pill metascore-pill ${metascoreClass(data.metascore)}">${data.metascore} Metascore</span>` : ""}
@@ -1515,7 +1517,7 @@
         ${data.description ? `<p class="movie-preview-overview">${escapeHtml(data.description)}</p>` : ""}
         <div class="movie-preview-meta">
           ${(data.genres || []).length ? `<div><strong>Genres:</strong> ${escapeHtml(data.genres.join(", "))}</div>` : ""}
-          ${(data.director || []).length ? `<div><strong>Director:</strong> ${escapeHtml(data.director.join(", "))}</div>` : ""}
+          ${(data.director || []).length ? `<div><strong>${data.mediaType === "tv" ? "Creator" : "Director"}:</strong> ${escapeHtml(data.director.join(", "))}</div>` : ""}
           ${(data.cast || []).length ? `<div><strong>Cast:</strong> ${escapeHtml(data.cast.slice(0, 6).map((c) => c.name).join(", "))}</div>` : ""}
         </div>
         <button type="button" class="btn-text search-again-btn" id="search-again-btn">Search again</button>
@@ -1587,9 +1589,10 @@
 
     const newItem = {
       id: "wl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      // The app's own search/add flow only resolves movies on TMDB — TV
-      // shows currently only enter the watchlist via a manual/bulk import.
-      mediaType: "movie",
+      // Search/lookup resolve both movies and TV shows; mediaType decides
+      // which TMDB endpoint family every later refresh (e.g. streaming
+      // providers) calls.
+      mediaType: selectedMovie.mediaType === "tv" ? "tv" : "movie",
       title: selectedMovie.title,
       originalTitle: selectedMovie.originalTitle || selectedMovie.title,
       originalLanguage: selectedMovie.originalLanguage || null,
@@ -1788,9 +1791,8 @@
 
     const newMovie = {
       id: "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      // The app's own search/add flow only resolves movies on TMDB — see the
-      // identical note in confirmAddToWatchlist().
-      mediaType: "movie",
+      // See the identical note in confirmAddToWatchlist().
+      mediaType: selectedMovie.mediaType === "tv" ? "tv" : "movie",
       title: selectedMovie.title,
       originalTitle: selectedMovie.originalTitle || selectedMovie.title,
       originalLanguage: selectedMovie.originalLanguage || null,
