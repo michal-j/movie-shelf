@@ -9,6 +9,18 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-10-08]
+
+### Changed
+
+- **Forgiving search** (topbar search, both tabs). Query and titles are
+  normalized before comparing: punctuation, accents and apostrophes are
+  ignored and spaces don't matter, so `dr no` finds *Dr. No*, `re animator`
+  / `reanimator` find *Re-Animator*, `amelie` finds *Amélie*. Words that
+  mix letters and digits are also read as leetspeak (`7`→v, `0`→o, `1`→i,
+  `3`→e, `4`→a, `5`→s), so `seven` finds *Se7en*. Matching is still
+  start-of-word only, and plain numbers like `2001` are untouched.
+
 ## [2026-10-06]
 
 ### Added

@@ -478,32 +478,66 @@
     return t.toLowerCase();
   }
 
-  function escapeRegex(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Search text is compared in a normalized form so punctuation, accents and
+  // stylized spellings don't get in the way: "dr no" finds "Dr. No",
+  // "re animator"/"reanimator" find "Re-Animator", "seven" finds "Se7en".
+  const LEET_DIGITS = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "v" };
+
+  function normalizeForSearch(text, { leet = false } = {}) {
+    const words = String(text)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // strip accents: "Amélie" -> "amelie"
+      .replace(/['’`]/g, "") // "Schindler's" -> "schindlers"
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+    if (!leet) return words;
+    // Only tokens mixing letters and digits ("Se7en", "S1m0ne") are decoded;
+    // standalone numbers ("2001", "13") must stay numbers.
+    return words.map((w) =>
+      /[a-z]/.test(w) && /[0-9]/.test(w) ? w.replace(/[0-9]/g, (d) => LEET_DIGITS[d] || d) : w
+    );
   }
 
-  // Matches the query as the start of a word, not anywhere inside one —
-  // "ace" finds "Ace Ventura" but not "Spacey" or "Wallace".
-  function wordPrefixRegex(query) {
-    return new RegExp("\\b" + escapeRegex(query), "i");
+  // True if the query matches the start of a word — "ace" finds "Ace Ventura"
+  // but not "Spacey" — ignoring spaces, so "reanimator" and "re animator"
+  // both match "Re-Animator".
+  function searchMatches(queryCompact, words) {
+    for (let i = 0; i < words.length; i++) {
+      if (words.slice(i).join("").startsWith(queryCompact)) return true;
+    }
+    return false;
+  }
+
+  // Returns a predicate for the search box text (or null when it's empty).
+  function buildSearchMatcher(rawQuery) {
+    const queryCompact = normalizeForSearch(rawQuery).join("");
+    if (!queryCompact) return null;
+    return (m) => {
+      const haystacks = [
+        m.title,
+        m.originalTitle,
+        ...(m.director || []),
+        ...(m.cast || []).map((c) => c.name),
+        ...(m.genres || []),
+      ];
+      return haystacks.some(
+        (h) =>
+          h &&
+          (searchMatches(queryCompact, normalizeForSearch(h)) ||
+            searchMatches(queryCompact, normalizeForSearch(h, { leet: true })))
+      );
+    };
   }
 
   function getFilteredSorted() {
     let list = allMovies();
 
-    if (state.search.trim()) {
-      const searchRe = wordPrefixRegex(state.search.trim());
-      list = list.filter((m) => {
-        const haystacks = [
-          m.title,
-          m.originalTitle,
-          ...(m.director || []),
-          ...(m.cast || []).map((c) => c.name),
-          ...(m.genres || []),
-        ];
-        return haystacks.some((h) => h && searchRe.test(h));
-      });
-    }
+    const matchesSearch = buildSearchMatcher(state.search);
+    if (matchesSearch) list = list.filter(matchesSearch);
 
     if (state.filters.watched === "watched") list = list.filter((m) => isWatched(m.id));
     else if (state.filters.watched === "unwatched") list = list.filter((m) => !isWatched(m.id));
@@ -576,19 +610,8 @@
   function getWatchlistFilteredSorted() {
     let list = allWatchlist();
 
-    if (state.search.trim()) {
-      const searchRe = wordPrefixRegex(state.search.trim());
-      list = list.filter((m) => {
-        const haystacks = [
-          m.title,
-          m.originalTitle,
-          ...(m.director || []),
-          ...(m.cast || []).map((c) => c.name),
-          ...(m.genres || []),
-        ];
-        return haystacks.some((h) => h && searchRe.test(h));
-      });
-    }
+    const matchesSearch = buildSearchMatcher(state.search);
+    if (matchesSearch) list = list.filter(matchesSearch);
 
     if (state.watchlistFilters.genres.size) {
       list = list.filter((m) => (m.genres || []).some((g) => state.watchlistFilters.genres.has(g)));

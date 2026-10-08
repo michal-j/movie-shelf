@@ -25,7 +25,7 @@ vanilla JS app — no framework, no build step, no bundler.
 - Movies and TV shows live side by side in both the collection and the
   watchlist: a "Type" filter (Movies / TV Shows) in the filter panel, and a
   "TV" badge on posters, list rows, and in the detail drawer.
-- Grid and list views, word-boundary search, sortable/resizable list
+- Grid and list views, punctuation-forgiving word-start search, sortable/resizable list
   columns, and a filter panel (type, decade, genre, country, format,
   watched status, streaming availability, and more).
 - A public demo mode with a curated, frozen subset of the real data —
