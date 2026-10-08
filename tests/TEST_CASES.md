@@ -558,3 +558,9 @@ watchlist", type "The Blue Planet", pick the (TV) result, confirm.
 ### Punctuation-only input shows everything
 **Steps:** Search `...`.
 **Expected:** No filtering applied.
+
+## Filters after the background streaming refresh (`filtersAfterStreamingRefresh.test.js`)
+
+### Collection filters still work once the streaming refresh lands
+**Steps:** Load the real app on the Personal collection tab with a never-fetched watchlist item (triggers the background refresh). Wait for it to finish, then click the Genre chip "Comedy".
+**Expected:** Only the Comedy movie is shown ("1 movie").

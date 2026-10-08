@@ -11,6 +11,16 @@ than by individual session.
 
 ## [2026-10-08]
 
+### Fixed
+
+- **Collection filters did nothing after load.** The background streaming
+  refresh for stale watchlist items rebuilt the watchlist's filter chips
+  into the chip rows shared with the collection tab, leaving Genre/
+  Country/Decade/Type wired to the watchlist's filter state. Switching
+  tabs rebuilt them, which is why filters "came back". All data-change
+  rebuilds now go through `rebuildFilterChips()`, which only builds the
+  active tab's chips.
+
 ### Changed
 
 - **Forgiving search** (topbar search, both tabs). Query and titles are
