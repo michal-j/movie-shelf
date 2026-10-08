@@ -303,8 +303,6 @@
       }
     }
 
-    buildFilterChips();
-    buildWatchlistFilterChips();
     bindEvents();
     applyGridCols();
     setViewMode(state.viewMode, { skipSave: true });
@@ -367,6 +365,15 @@
     renderChipGroup("filter-type", ["movie", "tv"], state.filters.types, mediaTypeLabel);
 
     if (!filterPanel.hidden) setupCollapsibleChipRow("filter-country", "filter-country-toggle");
+  }
+
+  // Rebuilds the chip rows for whichever tab is showing. Call this (not the
+  // two build functions directly) after data changes: the containers are
+  // shared, so rebuilding the *other* tab's chips would swap in chips wired
+  // to the wrong filter state and silently break filtering.
+  function rebuildFilterChips() {
+    if (state.activeView === "watchlist") buildWatchlistFilterChips();
+    else buildFilterChips();
   }
 
   // Decade/Genre/Country chip-row containers are shared with the collection
@@ -1675,7 +1682,7 @@
     state.allWatchlist.push(newItem);
     showToast("Added to watchlist");
     closeEditModal();
-    buildWatchlistFilterChips();
+    rebuildFilterChips();
     render();
 
     if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId, newItem.mediaType);
@@ -1691,7 +1698,7 @@
   function scheduleWatchlistRefreshRender() {
     clearTimeout(watchlistRefreshRenderTimer);
     watchlistRefreshRenderTimer = setTimeout(() => {
-      buildWatchlistFilterChips();
+      rebuildFilterChips();
       if (state.activeView === "watchlist") render();
     }, 300);
   }
@@ -1768,7 +1775,7 @@
       saveDemoWatchlist();
       showToast("Removed from watchlist");
       if (detailModalOpenId === id) closeDetailModal();
-      buildWatchlistFilterChips();
+      rebuildFilterChips();
       render();
       return;
     }
@@ -1782,7 +1789,7 @@
     state.allWatchlist = state.allWatchlist.filter((m) => m.id !== id);
     showToast("Removed from watchlist");
     if (detailModalOpenId === id) closeDetailModal();
-    buildWatchlistFilterChips();
+    rebuildFilterChips();
     render();
   }
 
@@ -1828,7 +1835,7 @@
       state.allMovies[idx] = { ...state.allMovies[idx], copies: updatedCopies };
       showToast(`Added ${format} copy of "${duplicateOfExisting.title}"`);
       closeEditModal();
-      buildFilterChips();
+      rebuildFilterChips();
       render();
       return;
     }
@@ -1895,7 +1902,7 @@
     state.allMovies.push(newMovie);
     showToast("Movie added");
     closeEditModal();
-    buildFilterChips();
+    rebuildFilterChips();
     render();
   });
 
@@ -1935,7 +1942,7 @@
       submitBtn.disabled = false;
       showToast("Movie updated");
       closeEditModal();
-      buildFilterChips();
+      rebuildFilterChips();
       render();
       return;
     }
@@ -1954,7 +1961,7 @@
     state.allMovies[idx] = { ...state.allMovies[idx], ...patch };
     showToast("Movie updated");
     closeEditModal();
-    buildFilterChips();
+    rebuildFilterChips();
     render();
   });
 
@@ -1973,7 +1980,7 @@
       saveDemoMovies();
       showToast("Movie removed");
       closeEditModal();
-      buildFilterChips();
+      rebuildFilterChips();
       render();
       return;
     }
@@ -1987,7 +1994,7 @@
     state.allMovies = state.allMovies.filter((m) => m.id !== state.editingId);
     showToast("Movie removed");
     closeEditModal();
-    buildFilterChips();
+    rebuildFilterChips();
     render();
   });
 
