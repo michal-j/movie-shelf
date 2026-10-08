@@ -140,8 +140,8 @@ The user knows this and said it's not important to fix.
 
 ## 4. Feature inventory
 
-Everything from the original prototype (grid/list view, sort, word-boundary
-search, filters, the sliding detail drawer, multi-copy support, watched
+Everything from the original prototype (grid/list view, sort, word-start
+search (normalized: ignores punctuation/accents/spacing, decodes `Se7en`-style digits — `buildSearchMatcher` in app.js), filters, the sliding detail drawer, multi-copy support, watched
 toggle) is unchanged in behavior — see git history before commit `5041321`
 if you need the deep rationale for any of those. What's been added/changed
 since the Supabase migration:

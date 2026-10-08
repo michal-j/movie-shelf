@@ -536,3 +536,25 @@ watchlist", type "The Blue Planet", pick the (TV) result, confirm.
 `tmdbId=13579&mediaType=tv`; the preview shows a "TV Series" pill and a
 "Creator:" line (not "Director:"); the inserted watchlist row has
 `media_type: "tv"`.
+
+## Forgiving search (`forgivingSearch.test.js`)
+
+### Punctuation and spacing are ignored
+**Steps:** Collection holds "Dr. No" and "Re-Animator". Search `dr no`, `drno`, `re animator`, `reanimator`.
+**Expected:** Each finds its movie.
+
+### Digit-stylized titles are found by their spelled-out name
+**Steps:** Collection holds "Se7en". Search `seven`.
+**Expected:** "Se7en" is shown. Searching `2001` still matches only "2001: A Space Odyssey" (standalone numbers aren't decoded).
+
+### Accents and apostrophes are ignored
+**Steps:** Search `amelie` and `schindlers list`.
+**Expected:** "Amélie" and "Schindler's List" are found.
+
+### Still start-of-word only
+**Steps:** Search `ace`.
+**Expected:** "Ace Ventura" only — not "Spacey Tale".
+
+### Punctuation-only input shows everything
+**Steps:** Search `...`.
+**Expected:** No filtering applied.
