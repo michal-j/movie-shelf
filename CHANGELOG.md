@@ -9,6 +9,12 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **"Both" option in the watchlist's Available filter**, for titles that
+  stream in Poland *and* sit on your shelf. Streaming and Owned still each
+  include those titles.
+
 ## [2026-11-04] — owned copies on the watchlist
 
 ### Added

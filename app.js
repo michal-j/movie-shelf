@@ -198,7 +198,7 @@
       genres: new Set(),
       countries: new Set(),
       types: new Set(), // subset of "movie" | "tv"
-      availability: "all", // all | streaming | owned | neither
+      availability: "all", // all | streaming | owned | both | neither
       streamingServices: new Set(),
     },
     editingId: null, // id currently open in edit modal (null = adding new)
@@ -666,6 +666,7 @@
         const owned = !!ownedCopyOf(m);
         if (availability === "streaming") return streaming;
         if (availability === "owned") return owned;
+        if (availability === "both") return streaming && owned;
         return !streaming && !owned; // "neither"
       });
     }

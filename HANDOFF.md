@@ -437,9 +437,11 @@ namespaces are separate). Where it shows:
   — …") above the streaming pills; the attribution line now carries the
   "Streaming in Poland" scope.
 - Filter: the watchlist's `availability` filter (`#filter-availability`,
-  `.filter-group-availability`, values all/streaming/owned/neither) replaced
-  `streamingAvailable` (yes/no). Same grid cell. On desktop "Neither" wraps
-  to a second line in column 1 — fine, Decade wraps too.
+  `.filter-group-availability`, values all/streaming/owned/both/neither) replaced
+  `streamingAvailable` (yes/no). Streaming and Owned overlap (each includes
+  titles that are both); Both is the intersection, Neither the complement.
+  Same grid cell; the chips wrap to a second line on desktop — fine, Decade
+  wraps too.
 - Add-to-watchlist preview: `ownedForWatchlistAdd` shows an informational
   "You already own this" notice; it does not disable the button.
 - Deliberately not done (user chose "easy does it", 2026-11-04): no poster
