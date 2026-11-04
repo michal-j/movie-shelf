@@ -20,6 +20,8 @@
 // tracks except copies/format/edition/aspectRatio/audio+subtitleLanguages,
 // which stay manual per physical copy.
 
+const { decodeEntities } = require("./_omdb");
+
 const SUPABASE_URL = "https://ybfxyrzkdexjjptuzzuy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_qI5PQ_DO9esWd9FPAFEbtQ_bcJkmUIN";
 
@@ -44,7 +46,7 @@ function parseRuntime(s) {
 
 function splitCredit(s) {
   if (!s || s === "N/A") return [];
-  return s
+  return decodeEntities(s)
     .split(",")
     .map((p) => p.replace(/\s*\([^)]*\)\s*$/, "").trim())
     .filter(Boolean);
@@ -164,7 +166,7 @@ module.exports = async (req, res) => {
 
     const result = {
       mediaType,
-      title: omdb?.Title || tmdb.title,
+      title: decodeEntities(omdb?.Title) || tmdb.title,
       originalTitle: tmdb.originalTitle,
       originalLanguage: details.original_language || null,
       // parseInt, not Number: OMDb gives series a year range ("2001–2002"),
@@ -180,7 +182,7 @@ module.exports = async (req, res) => {
       writers: splitCredit(omdb?.Writer) || [],
       cast,
       studios: (details.production_companies || []).map((c) => c.name),
-      description: omdb?.Plot && omdb.Plot !== "N/A" ? omdb.Plot : details.overview || null,
+      description: omdb?.Plot && omdb.Plot !== "N/A" ? decodeEntities(omdb.Plot) : details.overview || null,
       posterUrl: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null,
       backdropUrl: details.backdrop_path ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}` : null,
       tmdbId,

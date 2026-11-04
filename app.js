@@ -39,6 +39,7 @@
     "subtitleLanguages:subtitle_languages", "hasExtras:has_extras", "description",
     "posterUrl:poster_url", "backdropUrl:backdrop_url", "dateAdded:date_added",
     "collectionNumber:collection_number", "copies", "watched",
+    "ratingsFetchedAt:ratings_fetched_at",
   ].join(", ");
 
   const CAMEL_TO_DB_COLUMN = {
@@ -51,7 +52,7 @@
     audioLanguages: "audio_languages", subtitleLanguages: "subtitle_languages",
     hasExtras: "has_extras", description: "description", posterUrl: "poster_url",
     backdropUrl: "backdrop_url", dateAdded: "date_added", collectionNumber: "collection_number",
-    copies: "copies", watched: "watched",
+    copies: "copies", watched: "watched", ratingsFetchedAt: "ratings_fetched_at",
   };
 
   function toDbColumns(movieLikeObject) {
@@ -73,6 +74,7 @@
     "description", "posterUrl:poster_url", "backdropUrl:backdrop_url",
     "streamingProviders:streaming_pl", "streamingLink:streaming_link",
     "streamingFetchedAt:streaming_fetched_at", "dateAdded:date_added",
+    "ratingsFetchedAt:ratings_fetched_at",
   ].join(", ");
 
   const CAMEL_TO_DB_COLUMN_WATCHLIST = {
@@ -84,6 +86,7 @@
     description: "description", posterUrl: "poster_url", backdropUrl: "backdrop_url",
     streamingProviders: "streaming_pl", streamingLink: "streaming_link",
     streamingFetchedAt: "streaming_fetched_at", dateAdded: "date_added",
+    ratingsFetchedAt: "ratings_fetched_at",
   };
 
   function toDbColumnsWatchlist(itemLikeObject) {
@@ -314,6 +317,7 @@
         if (event === "SIGNED_OUT") window.location.href = "/login";
       });
       refreshStaleStreamingProviders();
+      refreshStaleRatings();
     }
   }
 
@@ -1763,6 +1767,98 @@
       }
     }
     for (let i = 0; i < Math.min(STALE_STREAMING_CONCURRENCY, stale.length); i++) worker();
+  }
+
+  // Keeps IMDb rating / votes / Metascore roughly current. Those numbers are
+  // copied from OMDb once, when a title is added, and drift afterwards (new
+  // releases get their Metascore weeks later; vote counts grow forever).
+  // Same shape as refreshStaleStreamingProviders: runs on real-app load only,
+  // capped, concurrency-limited and stalest-first, so a big backlog drains
+  // across sessions instead of in one burst. OMDb's free tier is 1000
+  // calls/day and shared with the Add flow, hence the modest cap.
+  //
+  // Staleness depends on the title's age: ratings of recent releases move,
+  // a 1960 classic's basically don't.
+  const RATINGS_REFRESH_LIMIT = 30;
+  const RATINGS_REFRESH_CONCURRENCY = 3;
+  function ratingsRefreshIntervalMs(year) {
+    const DAY = 24 * 60 * 60 * 1000;
+    if (!year) return 90 * DAY;
+    const age = new Date().getFullYear() - year;
+    if (age <= 1) return 7 * DAY;
+    if (age <= 3) return 30 * DAY;
+    return 90 * DAY;
+  }
+
+  let ratingsRefreshRenderTimer = null;
+  function scheduleRatingsRefreshRender() {
+    clearTimeout(ratingsRefreshRenderTimer);
+    ratingsRefreshRenderTimer = setTimeout(() => render(), 300);
+  }
+
+  // Resolves "limit" when OMDb's daily quota is exhausted (caller stops the
+  // whole run), otherwise undefined. Failures leave ratings_fetched_at
+  // untouched so the title is retried on a later load.
+  async function fetchAndStoreRatings(table, item) {
+    try {
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const res = await fetch(`/api/ratings?imdbId=${encodeURIComponent(item.imdbId)}`, {
+        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+      });
+      if (res.status === 429) return "limit";
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ratings lookup failed");
+
+      // Stamp even when OMDb has no record (found:false) so a title it can't
+      // resolve doesn't hog a refresh slot on every load. Never overwrite a
+      // stored value with null — a null means "OMDb has no value", not
+      // "the value is gone".
+      const fetchedAt = new Date().toISOString();
+      const changes = {};
+      if (data.found) {
+        if (data.imdbRating != null) changes.imdbRating = data.imdbRating;
+        if (data.imdbVotes != null) changes.imdbVotes = data.imdbVotes;
+        if (data.metascore != null) changes.metascore = data.metascore;
+      }
+      const { error } = await window.supabaseClient
+        .from(table)
+        .update({ ...toDbColumns(changes), ratings_fetched_at: fetchedAt })
+        .eq("id", item.id);
+      if (error) throw error;
+      Object.assign(item, changes, { ratingsFetchedAt: fetchedAt });
+      scheduleRatingsRefreshRender();
+      if (detailModalOpenId === item.id) renderDetailBody(item);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function refreshStaleRatings() {
+    const now = Date.now();
+    const stale = [];
+    for (const [table, list] of [["movies", state.allMovies], ["watchlist", state.allWatchlist]]) {
+      for (const item of list) {
+        if (!item.imdbId) continue;
+        const fetchedAt = item.ratingsFetchedAt ? new Date(item.ratingsFetchedAt).getTime() : 0;
+        if (!fetchedAt || now - fetchedAt > ratingsRefreshIntervalMs(item.year)) {
+          stale.push({ table, item, fetchedAt });
+        }
+      }
+    }
+    // Never-fetched first, then least recently refreshed; within a tie the
+    // newest releases first (their numbers move the most).
+    stale.sort((a, b) => a.fetchedAt - b.fetchedAt || (b.item.year || 0) - (a.item.year || 0));
+    const batch = stale.slice(0, RATINGS_REFRESH_LIMIT);
+
+    let next = 0;
+    let stop = false;
+    async function worker() {
+      while (!stop && next < batch.length) {
+        const { table, item } = batch[next++];
+        if ((await fetchAndStoreRatings(table, item)) === "limit") stop = true;
+      }
+    }
+    for (let i = 0; i < Math.min(RATINGS_REFRESH_CONCURRENCY, batch.length); i++) worker();
   }
 
   // Confirmation is handled by the caller (a press-again-to-confirm button in

@@ -9,6 +9,29 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **Background ratings refresh.** IMDb rating, vote count and Metascore are
+  now re-read from OMDb on real-app load (`refreshStaleRatings` in
+  `app.js`), for both the collection and the watchlist. Capped at 30
+  titles per load, 3 at a time; never-fetched first, then least recently
+  refreshed. Staleness depends on release age (this/last year: 7 days,
+  up to 3 years: 30 days, older: 90). A missing OMDb value never overwrites
+  a stored one; titles OMDb doesn't know are stamped so they don't hog a
+  slot; OMDb's daily limit stops the run. New `api/ratings.js` (one OMDb
+  call per title) and a `ratings_fetched_at` column on `movies` and
+  `watchlist`.
+
+### Fixed
+
+- **Missing Metascores on the watchlist.** All 104 titles from the
+  2026-09-15 watchlist import had no Metascore (e.g. *Child 44*); 87 of
+  them have one on OMDb and were backfilled, along with 7 empty writer
+  lists (data fix, no code). The other 17 genuinely have no Metascore.
+- **HTML entities in OMDb text** (`Dan O&apos;Bannon`) are now decoded by
+  `/api/movie-lookup` (shared `api/_omdb.js`). Existing rows are cleaned
+  separately.
+
 ## [2026-11-04]
 
 ### Added

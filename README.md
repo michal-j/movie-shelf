@@ -18,6 +18,9 @@ vanilla JS app — no framework, no build step, no bundler.
   cached streaming availability for Poland (via TMDB's JustWatch-powered
   data) — posters are shown in color when a title is streaming somewhere
   and grayscale when it isn't.
+- Ratings (IMDb rating, votes, Metascore) and Polish streaming availability
+  are refreshed in the background whenever the real app loads, a few dozen
+  titles at a time, so the numbers don't go stale.
 - Add flow is search-driven: type a title (debounced live search) or paste
   an IMDb ID, pick the right result, and the app pulls in a full
   TMDB+OMDb-merged preview before you confirm. No manual data entry for new
@@ -63,8 +66,8 @@ a `watchlist` table and a signed-in session — without that you'll be
 redirected to the sign-in page. `demo.html` needs nothing and works fully
 offline once loaded.
 
-The two `/api` serverless functions (`movie-search`, `movie-lookup`,
-`watch-providers`) require `TMDB_API_KEY` and `OMDB_API_KEY` environment
+The `/api` serverless functions (`movie-search`, `movie-lookup`,
+`watch-providers`, `ratings`) require `TMDB_API_KEY` and `OMDB_API_KEY` environment
 variables and only run on Vercel (locally, calls to `/api/*` will 404
 against the plain static server above).
 

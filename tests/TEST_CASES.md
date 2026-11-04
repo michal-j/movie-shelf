@@ -564,3 +564,71 @@ watchlist", type "The Blue Planet", pick the (TV) result, confirm.
 ### Collection filters still work once the streaming refresh lands
 **Steps:** Load the real app on the Personal collection tab with a never-fetched watchlist item (triggers the background refresh). Wait for it to finish, then click the Genre chip "Comedy".
 **Expected:** Only the Comedy movie is shown ("1 movie").
+
+## Background ratings refresh (`ratingsRefresh.test.js`)
+
+### Refreshes a never-fetched title and stores the new values
+**Steps:** Load the real app with one collection movie that has an IMDb id and no `ratingsFetchedAt`; `/api/ratings` answers rating 8.1, votes 5000, Metascore 77.
+**Expected:** One update on `movies` for that id with `imdb_rating`, `imdb_votes`, `metascore` and a `ratings_fetched_at` timestamp.
+
+### Covers the watchlist too
+**Steps:** Same, but the title is on the watchlist.
+**Expected:** The update goes to the `watchlist` table.
+
+### Never overwrites a stored value with "no value"
+**Steps:** Stored Metascore 61; `/api/ratings` returns a rating but null votes and null Metascore.
+**Expected:** The update contains the new rating and `ratings_fetched_at`, but no `metascore` and no `imdb_votes` key.
+
+### Stamps a title OMDb doesn't know
+**Steps:** `/api/ratings` returns `{ found: false }`.
+**Expected:** The only column written is `ratings_fetched_at` (so the title isn't retried on every load).
+
+### Leaves the title alone on a transient failure
+**Steps:** `/api/ratings` answers 502.
+**Expected:** No database write — the title is retried on a later load.
+
+### Stops the whole run on OMDb's daily limit
+**Steps:** 10 stale titles; `/api/ratings` answers 429.
+**Expected:** At most the 3 in-flight requests go out; nothing is written.
+
+### Skips titles without an IMDb id
+**Steps:** A movie with `imdbId: null`.
+**Expected:** No `/api/ratings` call.
+
+### Staleness depends on the title's age
+**Steps:** Titles released this year, 2 years ago and in 1960, each with a recent and an old `ratingsFetchedAt` (3/10, 20/40, 60/100 days).
+**Expected:** Only the old one of each pair is fetched (new releases go stale after 7 days, 2–3-year-old after 30, older after 90).
+
+### A run is capped at 30, never-fetched first
+**Steps:** 30 never-fetched titles plus 5 titles last fetched 500 days ago.
+**Expected:** Exactly 30 requests, all for the never-fetched ones.
+
+### Not wired into the public demo
+**Steps:** Boot `demo.html` with one collection movie and one watchlist item that have IMDb ids and no `ratingsFetchedAt`.
+**Expected:** No `/api/ratings` request is made.
+
+## /api/ratings and OMDb entity decoding (`ratingsApi.test.js`)
+
+### Returns numeric rating, votes and Metascore
+**Steps:** OMDb answers `imdbRating "6.4"`, `imdbVotes "80,390"`, `Metascore "41"`.
+**Expected:** `{ found: true, imdbRating: 6.4, imdbVotes: 80390, metascore: 41 }`.
+
+### N/A becomes null
+**Steps:** OMDb answers `N/A` for all three.
+**Expected:** All three are `null`, not `NaN`.
+
+### Unknown title
+**Steps:** OMDb answers `Response: "False"` with "Error getting data."
+**Expected:** HTTP 200 `{ found: false }`.
+
+### OMDb's request limit maps to 429
+**Steps:** OMDb answers "Request limit reached!"
+**Expected:** HTTP 429.
+
+### Requires a session; rejects malformed ids
+**Steps:** Call with an invalid session; call with `imdbId=not-an-id`.
+**Expected:** HTTP 401; HTTP 400 without any OMDb call.
+
+### HTML entities in OMDb text are decoded
+**Steps:** Decode `Dan O&apos;Bannon`, `Q&amp;A &quot;x&quot;`, `&amp;apos;`.
+**Expected:** `Dan O'Bannon`, `Q&A "x"`, `&apos;` (no double decoding); plain text and null unchanged.
