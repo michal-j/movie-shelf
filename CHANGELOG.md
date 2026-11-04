@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04] — ESLint
+
 ### Added
 
 - **ESLint.** `npm run lint` (ESLint 9, flat config in `eslint.config.mjs`)
