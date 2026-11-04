@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04] — "Both" availability filter
+
 ### Added
 
 - **"Both" option in the watchlist's Available filter**, for titles that
