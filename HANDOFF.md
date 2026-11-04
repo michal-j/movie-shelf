@@ -415,6 +415,31 @@ since the Supabase migration:
 
 ---
 
+### Reveal/highlight after adding (2026-11-04)
+
+`revealAddedAndToast(id, message)` (app.js, next to `render()`) is called
+right after `render()` in the three add paths (collection add, duplicate
+copy, watchlist add). Grid cards and list rows carry `data-id`;
+`applyAddedHighlight()` — called at the end of every `render()` — re-adds
+the `.just-added` class to whichever node matches the module-level
+`addedHighlightId`, so background refresh re-renders don't drop it. Only the
+first call scrolls — instantly if the target is more than ~1.5 viewports
+away (smooth-scrolling ~23,000px in a 545-title grid took longer than a
+second and ate most of the highlight), smoothly otherwise. Cleared by a
+4 s timer. On touch, `bindCardOpen` treats `.just-added` like
+`.preview-active`, so the first tap opens it. If the id isn't in the
+currently filtered view (`state.movies` / `state.watchlist`), nothing is
+highlighted and the toast says why (search / filters / both) with a
+**Show** action: `clearSearchAndFiltersForActiveView()` then
+`revealAddedItem()`. `showToast(msg, { label, onClick })` now supports one
+action button (6 s instead of 2.2 s); the filter counts it uses are
+`collectionFilterCount()` / `watchlistFilterCount()`, shared with the
+filter badge. Gotcha: `closeEditModal()` resets `duplicateOfExisting`, so
+read it before closing. Real-app only by construction — Add is inert in
+the demo.
+
+---
+
 ## 5. Data model & backend
 
 **Supabase project:** `movie-shelf` (id `ybfxyrzkdexjjptuzzuy`), org JCBK,

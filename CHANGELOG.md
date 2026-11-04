@@ -9,6 +9,26 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **Reveal and highlight after adding.** After a successful add (new
+  collection title, new watchlist title, or an extra copy of a title you
+  already own) the view scrolls to the title and highlights it for 4
+  seconds: an accent ring with the hover details forced open in the grid,
+  a tinted row in the list. The highlight is class-driven rather than
+  `:hover`, so moving the mouse doesn't clear it, and it is re-applied on
+  every re-render so background streaming/ratings refreshes can't wipe it.
+  If the active search and/or filters hide the new title, nothing is
+  highlighted; the toast says which ("… — hidden by your search", "…your
+  filters", "…your search and filters") and has a **Show** button that
+  clears search and the current tab's filters (the other tab's filters are
+  left alone) and then reveals and highlights the title. Toasts with a
+  button stay up for 6 seconds instead of 2.2.
+  Long jumps (more than ~1.5 screens) scroll instantly so the highlight
+  isn't spent mid-scroll; short ones scroll smoothly. On touch, the
+  highlighted card opens on the first tap (its details are already
+  showing). Respects `prefers-reduced-motion` (no smooth scroll, no pulse).
+
 ## [2026-11-04] — ratings refresh
 
 ### Added

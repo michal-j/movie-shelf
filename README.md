@@ -25,6 +25,9 @@ vanilla JS app — no framework, no build step, no bundler.
   an IMDb ID, pick the right result, and the app pulls in a full
   TMDB+OMDb-merged preview before you confirm. No manual data entry for new
   titles.
+- A newly added title is scrolled into view and highlighted for a few
+  seconds. If your search or filters hide it, the toast says so and offers
+  a **Show** button that clears them and reveals it.
 - Movies and TV shows live side by side in both the collection and the
   watchlist: a "Type" filter (Movies / TV Shows) in the filter panel, and a
   "TV" badge on posters, list rows, and in the detail drawer.
