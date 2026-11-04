@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { bootDemoApp } from "./helpers/bootApp.js";
 import { movies } from "./fixtures/movies.js";
 import { watchlist } from "./fixtures/watchlist.js";
