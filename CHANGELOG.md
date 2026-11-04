@@ -9,6 +9,33 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **Watchlist knows what you already own.** A watchlist title that's also
+  in your personal collection (matched by IMDb ID, or TMDB ID + movie/TV
+  when there's no IMDb ID) now counts as available: its poster stays in
+  color even when nothing streams it, the hover card and the list's
+  streaming column show an **Owned · Blu-ray** tag ahead of the streaming
+  icons, and the drawer's "Where to watch" section starts with "On your
+  shelf — Blu-ray, DVD". Worked out in the browser on every render, so
+  adding or deleting a copy shows up straight away; no new DB column.
+  Adding a title you own to the watchlist shows an informational "You
+  already own this" note in the preview (it doesn't block the add).
+- The demo watchlist has two owned titles (Interstellar, also streaming;
+  The Treasure of the Sierra Madre, owned only) so the feature is visible
+  there.
+
+### Changed
+
+- The watchlist's **Streaming available** filter (All / Yes / No) is now
+  **Available**: All / Streaming / Owned / Neither. A title that's owned
+  and streaming matches both Streaming and Owned; Neither is what you
+  can't watch anywhere.
+- Copy: "Where to watch (PL)" → "Where to watch" (the Polish scope moved to
+  "Streaming in Poland · data provided by JustWatch"), the list column
+  "Streaming" → "Where to watch", and "No streaming options available" →
+  "Not streaming in Poland".
+
 ## [2026-11-04] — ESLint
 
 ### Added

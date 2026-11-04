@@ -66,12 +66,15 @@ describe("Watchlist filtering", () => {
     expect(cardTitles().sort()).toEqual(["Awaiting Dawn", "Cue the Credits"]);
   });
 
-  it("filters by streaming availability", () => {
-    clickChip("filter-streaming-available", "yes");
+  it("filters by availability (streaming / neither)", () => {
+    clickChip("filter-availability", "streaming");
     expect(counterText()).toBe("2 movies");
     expect(cardTitles().sort()).toEqual(["Awaiting Dawn", "Cue the Credits"]);
 
-    clickChip("filter-streaming-available", "no");
+    // None of these fixture titles is in the fixture collection (no shared
+    // IDs), so "Neither" is everything that isn't streaming. Owned-copy
+    // cases live in watchlistOwned.test.js.
+    clickChip("filter-availability", "neither");
     expect(counterText()).toBe("1 movie");
     expect(cardTitles()).toEqual(["Backlog Blues"]);
   });
@@ -84,13 +87,13 @@ describe("Watchlist filtering", () => {
 
   it("resets every filter via Clear all", () => {
     clickChip("filter-genre", "Drama");
-    clickChip("filter-streaming-available", "yes");
+    clickChip("filter-availability", "streaming");
     clickChip("filter-type", "tv");
     click("filter-clear-btn");
 
     expect(counterText()).toBe("3 movies");
     expect(
-      document.querySelector('#filter-streaming-available .chip[data-value="all"]').classList.contains("active")
+      document.querySelector('#filter-availability .chip[data-value="all"]').classList.contains("active")
     ).toBe(true);
     expect(document.querySelector('#filter-type .chip[data-value="tv"]').classList.contains("active")).toBe(false);
   });

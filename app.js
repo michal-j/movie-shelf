@@ -137,7 +137,7 @@
 
   const WATCHLIST_LIST_COLUMNS = [
     { key: "originalTitle", label: "Original Title", width: 200, minWidth: 90, defaultVisible: true },
-    { key: "streaming", label: "Streaming", width: 170, minWidth: 100, defaultVisible: true },
+    { key: "streaming", label: "Where to watch", width: 170, minWidth: 100, defaultVisible: true },
     { key: "genres", label: "Genre", width: 160, minWidth: 70, defaultVisible: true },
     { key: "year", label: "Year", width: 70, minWidth: 50, defaultVisible: true },
     { key: "runtime", label: "Runtime", width: 80, minWidth: 55, defaultVisible: true },
@@ -198,7 +198,7 @@
       genres: new Set(),
       countries: new Set(),
       types: new Set(), // subset of "movie" | "tv"
-      streamingAvailable: "all", // all | yes | no
+      availability: "all", // all | streaming | owned | neither
       streamingServices: new Set(),
     },
     editingId: null, // id currently open in edit modal (null = adding new)
@@ -337,6 +337,24 @@
 
   function allWatchlist() {
     return state.allWatchlist;
+  }
+
+  // Watchlist titles you already own a copy of, matched against the personal
+  // collection by IMDb ID, falling back to TMDB ID + media type (TMDB movie
+  // and TV ids are separate namespaces). Derived on every call rather than
+  // stored, so adding/deleting a copy is reflected on the next render.
+  // Returns a function: watchlist item -> matching collection movie | null.
+  function buildOwnedLookup() {
+    const byImdb = new Map();
+    const byTmdb = new Map();
+    for (const m of allMovies()) {
+      if (m.imdbId) byImdb.set(m.imdbId, m);
+      if (m.tmdbId) byTmdb.set(`${m.mediaType || "movie"}:${m.tmdbId}`, m);
+    }
+    return (item) =>
+      (item.imdbId && byImdb.get(item.imdbId)) ||
+      (item.tmdbId && byTmdb.get(`${item.mediaType || "movie"}:${item.tmdbId}`)) ||
+      null;
   }
 
   function isWatched(id) {
@@ -640,9 +658,16 @@
     if (state.watchlistFilters.types.size) {
       list = list.filter((m) => state.watchlistFilters.types.has(m.mediaType || "movie"));
     }
-    if (state.watchlistFilters.streamingAvailable !== "all") {
-      const wantAvailable = state.watchlistFilters.streamingAvailable === "yes";
-      list = list.filter((m) => ((m.streamingProviders || []).length > 0) === wantAvailable);
+    const availability = state.watchlistFilters.availability;
+    if (availability !== "all") {
+      const ownedCopyOf = buildOwnedLookup();
+      list = list.filter((m) => {
+        const streaming = (m.streamingProviders || []).length > 0;
+        const owned = !!ownedCopyOf(m);
+        if (availability === "streaming") return streaming;
+        if (availability === "owned") return owned;
+        return !streaming && !owned; // "neither"
+      });
     }
     if (state.watchlistFilters.streamingServices.size) {
       list = list.filter((m) =>
@@ -783,7 +808,7 @@
 
   function watchlistFilterCount() {
     const f = state.watchlistFilters;
-    return (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.types.size + f.streamingServices.size;
+    return (f.availability !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.types.size + f.streamingServices.size;
   }
 
   function updateFilterBadge() {
@@ -852,7 +877,7 @@
   function streamingProvidersHtml(movie, opts = {}) {
     const providers = movie.streamingProviders || [];
     if (!providers.length) {
-      return `<span class="streaming-empty">No streaming options available</span>`;
+      return `<span class="streaming-empty">Not streaming in Poland</span>`;
     }
     const link = movie.streamingLink || "#";
     if (opts.variant === "link") {
@@ -875,6 +900,21 @@
       </a>`
       )
       .join("");
+  }
+
+  function ownedTagHtml(ownedMovie) {
+    const formats = ownedFormatsList(ownedMovie);
+    return `<span class="owned-tag" title="In your personal collection">${discIconSvg()}<span>Owned${formats ? ` · ${escapeHtml(formats)}` : ""}</span></span>`;
+  }
+
+  // Grid overlay / list cell for a watchlist item: an "Owned" tag (if you
+  // have a copy) ahead of the streaming icons. When you own it and nothing
+  // streams, the tag replaces the "Not streaming" note rather than sitting
+  // next to it.
+  function watchlistAvailabilityHtml(movie, ownedMovie, opts = {}) {
+    const streaming = (movie.streamingProviders || []).length > 0;
+    if (!ownedMovie) return streamingProvidersHtml(movie, opts);
+    return ownedTagHtml(ownedMovie) + (streaming ? streamingProvidersHtml(movie, opts) : "");
   }
 
   // On touch, the first tap reveals the card's hover overlay (title/meta/
@@ -964,15 +1004,17 @@
   function renderWatchlistGrid(movies) {
     watchlistGrid.innerHTML = "";
     const frag = document.createDocumentFragment();
+    const ownedCopyOf = buildOwnedLookup();
     movies.forEach((movie) => {
-      const hasStreaming = (movie.streamingProviders || []).length > 0;
+      const owned = ownedCopyOf(movie);
+      const available = owned || (movie.streamingProviders || []).length > 0;
       const card = document.createElement("article");
       card.className = "movie-card";
       card.dataset.id = movie.id;
       card.tabIndex = 0;
 
       const poster = posterNode(movie, "poster");
-      if (!hasStreaming) poster.classList.add("poster-no-streaming");
+      if (!available) poster.classList.add("poster-no-streaming");
       card.appendChild(poster);
 
       if (movie.mediaType === "tv") card.appendChild(typeBadgeNode());
@@ -994,7 +1036,7 @@
           ${movie.runtimeMinutes ? `<span>${movie.runtimeMinutes}m</span>` : ""}
           ${(movie.genres || [])[0] ? `<span>${escapeHtml(movie.genres[0])}</span>` : ""}
         </p>
-        <div class="streaming-row">${streamingProvidersHtml(movie)}</div>
+        <div class="streaming-row">${watchlistAvailabilityHtml(movie, owned)}</div>
       `;
       card.appendChild(overlay);
       overlay.querySelectorAll(".streaming-icon").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
@@ -1018,7 +1060,7 @@
     list.style.setProperty("--list-template", parts.join(" "));
   }
 
-  function listCellHtml(column, movie) {
+  function listCellHtml(column, movie, ownedMovie = null) {
     switch (column.key) {
       case "originalTitle":
         return `<div class="row-cell row-original-title">${
@@ -1044,7 +1086,7 @@
       case "director":
         return `<div class="row-cell row-director">${escapeHtml((movie.director || []).join(", ")) || "—"}</div>`;
       case "streaming":
-        return `<div class="row-cell row-streaming">${streamingProvidersHtml(movie, { variant: "row" })}</div>`;
+        return `<div class="row-cell row-streaming">${watchlistAvailabilityHtml(movie, ownedMovie, { variant: "row" })}</div>`;
       default:
         return `<div class="row-cell"></div>`;
     }
@@ -1166,8 +1208,10 @@
     wireWatchlistColumnResizeHandles();
 
     const frag = document.createDocumentFragment();
+    const ownedCopyOf = buildOwnedLookup();
     movies.forEach((movie) => {
-      const hasStreaming = (movie.streamingProviders || []).length > 0;
+      const owned = ownedCopyOf(movie);
+      const available = owned || (movie.streamingProviders || []).length > 0;
       const row = document.createElement("div");
       row.className = "movie-row";
       row.dataset.id = movie.id;
@@ -1176,13 +1220,13 @@
       const posterWrap = document.createElement("div");
       posterWrap.className = "row-poster";
       const posterImg = posterNode(movie, "row-poster-img");
-      if (!hasStreaming) posterImg.classList.add("poster-no-streaming");
+      if (!available) posterImg.classList.add("poster-no-streaming");
       posterWrap.appendChild(posterImg);
 
       row.innerHTML = `
         <div class="row-poster-slot"></div>
         <div class="row-cell row-title">${typeTagHtml(movie)}${escapeHtml(movie.title)}</div>
-        ${visibleColumns.map((c) => listCellHtml(c, movie)).join("")}
+        ${visibleColumns.map((c) => listCellHtml(c, movie, owned)).join("")}
       `;
       row.querySelector(".row-poster-slot").replaceWith(posterWrap);
 
@@ -1376,6 +1420,7 @@
     // owned-collection rows never have that field, so its presence tells us
     // which kind of item this is without threading a separate flag around.
     const isWatchlistItem = movie.streamingProviders !== undefined;
+    const ownedMovie = isWatchlistItem ? buildOwnedLookup()(movie) : null;
     const watched = !isWatchlistItem && isWatched(movie.id);
     const backdrop = movie.backdropUrl || movie.posterUrl;
     detailBody.innerHTML = `
@@ -1412,9 +1457,10 @@
           ${movie.description ? `<div class="detail-section"><h4>Overview</h4><p>${escapeHtml(movie.description)}</p></div>` : ""}
 
           ${isWatchlistItem ? `<div class="detail-section">
-            <h4>Where to watch (PL)</h4>
+            <h4>Where to watch</h4>
+            ${ownedMovie ? `<p class="owned-line">${discIconSvg()}<span>On your shelf — <strong>${escapeHtml(ownedFormatsList(ownedMovie) || "in your collection")}</strong></span></p>` : ""}
             <div class="streaming-links">${streamingProvidersHtml(movie, { variant: "link" })}</div>
-            ${(movie.streamingProviders || []).length ? `<p class="streaming-attribution">Data provided by JustWatch</p>` : ""}
+            ${(movie.streamingProviders || []).length ? `<p class="streaming-attribution">Streaming in Poland · data provided by JustWatch</p>` : ""}
           </div>` : ""}
 
           ${(movie.cast || []).length ? `<div class="detail-section"><h4>Cast</h4><div class="cast-grid">${movie.cast
@@ -1477,6 +1523,7 @@
   let selectedMovie = null; // full merged TMDB+OMDb record for the movie about to be added
   let duplicateOfExisting = null; // set when selectedMovie's imdbId matches a movie already on the shelf
   let isDuplicateInWatchlist = false; // set when selectedMovie's imdbId is already in the watchlist
+  let ownedForWatchlistAdd = null; // collection movie matching a watchlist add (informational only)
   let addTarget = "collection"; // collection | watchlist — which list the add flow writes to
 
   // Same press-again-to-confirm pattern as the watchlist drawer's Remove
@@ -1534,6 +1581,7 @@
     selectedMovie = null;
     duplicateOfExisting = null;
     isDuplicateInWatchlist = false;
+    ownedForWatchlistAdd = null;
     clearTimeout(searchDebounceTimer);
     el("search-query").value = "";
     el("search-results").hidden = true;
@@ -1632,9 +1680,11 @@
     if (addTarget === "watchlist") {
       duplicateOfExisting = null;
       isDuplicateInWatchlist = data.imdbId ? state.allWatchlist.some((w) => w.imdbId === data.imdbId) : false;
+      ownedForWatchlistAdd = isDuplicateInWatchlist ? null : buildOwnedLookup()(data);
     } else {
       duplicateOfExisting = data.imdbId ? state.allMovies.find((m) => m.imdbId === data.imdbId) || null : null;
       isDuplicateInWatchlist = false;
+      ownedForWatchlistAdd = null;
     }
     renderMoviePreview(data);
     setSearchStatus("");
@@ -1661,6 +1711,7 @@
         </div>
         ${duplicateOfExisting ? `<p class="duplicate-notice">You already own this — <strong>${escapeHtml(ownedFormatsList(duplicateOfExisting))}</strong>. Saving will add another copy, not a new entry.</p>` : ""}
         ${isDuplicateInWatchlist ? `<p class="duplicate-notice">This is already in your watchlist.</p>` : ""}
+        ${ownedForWatchlistAdd ? `<p class="duplicate-notice">You already own this — <strong>${escapeHtml(ownedFormatsList(ownedForWatchlistAdd) || "in your collection")}</strong>. It'll show as available on your watchlist.</p>` : ""}
         ${data.description ? `<p class="movie-preview-overview">${escapeHtml(data.description)}</p>` : ""}
         <div class="movie-preview-meta">
           ${(data.genres || []).length ? `<div><strong>Genres:</strong> ${escapeHtml(data.genres.join(", "))}</div>` : ""}
@@ -1674,6 +1725,7 @@
       selectedMovie = null;
       duplicateOfExisting = null;
       isDuplicateInWatchlist = false;
+      ownedForWatchlistAdd = null;
       preview.hidden = true;
       preview.innerHTML = "";
       el("confirm-add-btn").disabled = true;
@@ -2313,6 +2365,9 @@
   }
 
   // ---------- Icons ----------
+  function discIconSvg() {
+    return `<svg class="disc-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>`;
+  }
   function eyeIconSvg() {
     return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 12C1.5 12 5 5 12 5C19 5 22.5 12 22.5 12C22.5 12 19 19 12 19C5 19 1.5 12 1.5 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>`;
   }
@@ -2411,11 +2466,11 @@
       });
     });
 
-    document.querySelectorAll("#filter-streaming-available .chip").forEach((chip) => {
+    document.querySelectorAll("#filter-availability .chip").forEach((chip) => {
       chip.classList.toggle("active", chip.dataset.value === "all");
       chip.addEventListener("click", () => {
-        state.watchlistFilters.streamingAvailable = chip.dataset.value;
-        document.querySelectorAll("#filter-streaming-available .chip").forEach((c) => c.classList.toggle("active", c === chip));
+        state.watchlistFilters.availability = chip.dataset.value;
+        document.querySelectorAll("#filter-availability .chip").forEach((c) => c.classList.toggle("active", c === chip));
         render();
       });
     });
@@ -2514,7 +2569,7 @@
     state.watchlistFilters.countries.clear();
     state.watchlistFilters.decades.clear();
     state.watchlistFilters.types.clear();
-    state.watchlistFilters.streamingAvailable = "all";
+    state.watchlistFilters.availability = "all";
     state.watchlistFilters.streamingServices.clear();
     document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c.dataset.value === "all"));
     render();

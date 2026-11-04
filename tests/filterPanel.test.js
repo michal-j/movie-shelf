@@ -66,7 +66,7 @@ describe("filter panel groups shown per tab", () => {
     expect(hidden("filter-group-watched")).toBe(false);
     expect(hidden("filter-group-format")).toBe(false);
     expect(hidden("filter-group-copies")).toBe(false);
-    expect(hidden("filter-group-streaming-available")).toBe(true);
+    expect(hidden("filter-group-availability")).toBe(true);
     expect(hidden("filter-group-streaming-service")).toBe(true);
   });
 
@@ -88,7 +88,7 @@ describe("filter panel groups shown per tab", () => {
     expect(hidden("filter-group-watched")).toBe(true);
     expect(hidden("filter-group-format")).toBe(true);
     expect(hidden("filter-group-copies")).toBe(true);
-    expect(hidden("filter-group-streaming-available")).toBe(false);
+    expect(hidden("filter-group-availability")).toBe(false);
     expect(hidden("filter-group-streaming-service")).toBe(false);
   });
 
