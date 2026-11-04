@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04] — owned copies on the watchlist
+
 ### Added
 
 - **Watchlist knows what you already own.** A watchlist title that's also
