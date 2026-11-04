@@ -71,7 +71,7 @@ visible. Streaming available and Streaming service groups are hidden.
 
 ### shows watchlist-only groups and hides collection-only groups on the Watchlist tab
 **Steps:** Switch to the Watchlist tab.
-**Expected:** Streaming available and Streaming service groups are
+**Expected:** Available and Streaming service groups are
 visible. Watched status, Format, and Copies groups are hidden.
 
 ### keeps Decade (and Genre/Country) visible and populated on the Watchlist tab too
@@ -185,20 +185,22 @@ Prefect Storm"), Third Wheel (1987).
 item with `mediaType: "tv"`). "Movies" shows 2 movies: Awaiting Dawn,
 Cue the Credits.
 
-### filters by streaming availability
-**Steps:** Click "Yes" under Streaming available. Then click "No."
-**Expected:** "Yes" shows 2 movies (Awaiting Dawn, Cue the Credits —
-both have a streaming provider). "No" shows 1 movie (Backlog Blues, the
-only one with none).
+### filters by availability (streaming / neither)
+**Steps:** Click "Streaming" under Available. Then click "Neither."
+**Expected:** "Streaming" shows 2 movies (Awaiting Dawn, Cue the Credits —
+both have a streaming provider). "Neither" shows 1 movie (Backlog Blues,
+the only one with none — no fixture watchlist title is in the fixture
+collection, so none counts as owned). Owned cases: see "Watchlist: titles
+you already own" below.
 
 ### filters by streaming service
 **Steps:** Click the "Netflix" streaming-service chip.
 **Expected:** Counter reads "1 movie": Awaiting Dawn.
 
 ### resets every filter via Clear all
-**Steps:** Click "Drama" (genre), "Yes" (streaming available), and
+**Steps:** Click "Drama" (genre), "Streaming" (available), and
 "TV Shows" (type). Click "Clear all."
-**Expected:** Counter reads "3 movies" again, the Streaming-available
+**Expected:** Counter reads "3 movies" again, the Available
 group's "All" chip is active again, and the "TV Shows" type chip is no
 longer active.
 
@@ -682,3 +684,57 @@ watchlist", type "The Blue Planet", pick the (TV) result, confirm.
 ### A plain toast has no action button
 **Steps:** Add a title that matches the current (empty) filters.
 **Expected:** Toast "Movie added" with no button.
+
+---
+
+## Watchlist: titles you already own (`watchlistOwned.test.js`)
+
+Own fixtures (in the test file), because they need IDs shared between the
+collection and the watchlist:
+
+| Watchlist item | IMDb / TMDB | Streaming | In collection as |
+|---|---|---|---|
+| Owned Not Streaming | tt0000001 / 101 | — | Shelf Only (Blu-ray + DVD) |
+| Owned And Streaming | tt0000002 / 102 | Netflix | Shelf And Stream (DVD) |
+| Owned Via Tmdb | — / 103 | — | Matched By Tmdb (no IMDb id, DVD) |
+| TV Id Clash | — / 104, **TV** | — | only a *movie* with TMDB 104 — not a match |
+| Unavailable | — / — | — | only a movie with no ids — not a match |
+| Streaming Only | tt0000006 / 106 | Max | — |
+
+### shows an Owned tag with the owned formats on the grid card
+**Steps:** Open the Watchlist tab, look at Owned Not Streaming's card overlay.
+**Expected:** Tag reads "Owned · Blu-ray, DVD". Streaming Only has no tag.
+
+### replaces the 'Not streaming' note when owned, and keeps the streaming icons when it streams too
+**Steps:** Look at the overlays of Owned Not Streaming, Owned And Streaming, Unavailable.
+**Expected:** Owned Not Streaming shows the tag only (no "Not streaming" note); Owned And Streaming shows the tag plus its Netflix icon; Unavailable shows "Not streaming in Poland".
+
+### only greys out posters that are neither streaming nor owned
+**Steps:** Look at every poster.
+**Expected:** In colour: Owned Not Streaming, Owned Via Tmdb, Streaming Only (and Owned And Streaming). Greyed: Unavailable, TV Id Clash.
+
+### matches by TMDB id + media type when there's no IMDb id, never across movie/TV or on missing ids
+**Steps:** Look at Owned Via Tmdb, TV Id Clash, Unavailable.
+**Expected:** Only Owned Via Tmdb has the Owned tag.
+
+### filters by availability: streaming, owned, neither
+**Steps:** Under Available, click Streaming, then Owned, then Neither, then All.
+**Expected:** Streaming → Owned And Streaming, Streaming Only. Owned → Owned And Streaming, Owned Not Streaming, Owned Via Tmdb. Neither → TV Id Clash, Unavailable. All → all 6.
+
+### shows 'On your shelf' in the drawer's Where to watch section
+**Steps:** Open Owned Not Streaming's drawer; close it; open Streaming Only's.
+**Expected:** Section heading "Where to watch"; first line "On your shelf — Blu-ray, DVD", then "Not streaming in Poland". Streaming Only has no shelf line.
+
+### shows the Owned tag in list view's Where to watch column
+**Steps:** Switch to list view.
+**Expected:** Column header reads "Where to watch"; Owned Not Streaming's cell has the Owned tag and its poster thumbnail is in colour.
+
+## Add to watchlist: title already in the collection (`watchlistOwned.test.js`, real app)
+
+### notes that you already own it, without blocking the add
+**Steps:** On the Watchlist tab, Add to watchlist, search, pick a result whose lookup returns IMDb tt0000001 (Shelf Only in the collection).
+**Expected:** Preview shows "You already own this — Blu-ray, DVD…"; the Add to watchlist button stays enabled.
+
+### shows no ownership note for a title you don't own
+**Steps:** Same, with a lookup returning an IMDb ID not in the collection.
+**Expected:** No notice in the preview.

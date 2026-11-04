@@ -16,8 +16,11 @@ vanilla JS app — no framework, no build step, no bundler.
   film) is one row, not two.
 - A separate, independent **Watchlist** for titles you don't own yet, with
   cached streaming availability for Poland (via TMDB's JustWatch-powered
-  data) — posters are shown in color when a title is streaming somewhere
-  and grayscale when it isn't.
+  data). Titles you already own a copy of (matched against the collection)
+  show as **Owned · Blu-ray** next to the streaming services. Posters are in
+  color when a title is streaming somewhere or owned, grayscale when
+  neither, and the **Available** filter (Streaming / Owned / Neither) slices
+  by the same thing.
 - Ratings (IMDb rating, votes, Metascore) and Polish streaming availability
   are refreshed in the background whenever the real app loads, a few dozen
   titles at a time, so the numbers don't go stale.
@@ -33,7 +36,7 @@ vanilla JS app — no framework, no build step, no bundler.
   "TV" badge on posters, list rows, and in the detail drawer.
 - Grid and list views, punctuation-forgiving word-start search, sortable/resizable list
   columns, and a filter panel (type, decade, genre, country, format,
-  watched status, streaming availability, and more).
+  watched status, availability, streaming service, and more).
 - A public demo mode with a curated, frozen subset of the real data —
   fully client-side, no backend calls, changes persist only in your own
   browser's `localStorage`.

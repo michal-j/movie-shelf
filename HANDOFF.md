@@ -63,9 +63,11 @@ data/movies.json     — historical full export, NOT used by the running
 data/movies-demo.json — static 32-movie curated subset for the public demo.
                         Frozen snapshot, NOT connected to Supabase in any
                         way — see §3 for why this can go stale.
-data/watchlist-demo.json — same idea, for the demo's Watchlist tab: 14
-                        titles curated from the real watchlist (7
-                        streamable/7 not, plus one TV entry), frozen.
+data/watchlist-demo.json — same idea, for the demo's Watchlist tab: 16
+                        titles — 14 curated from the real watchlist (7
+                        streamable/7 not, plus one TV entry) plus 2 that
+                        are also in movies-demo.json (Interstellar,
+                        Sierra Madre) to show owned copies, frozen.
 scripts/*.py         — one-off data-pipeline scripts that originally built
                         data/movies.json from the user's My Movies XML +
                         CSV exports. Not part of the running app. Useful
@@ -394,7 +396,7 @@ since the Supabase migration:
   Each watchlist item caches TMDB/JustWatch streaming availability for
   Poland: grid posters go grayscale+dimmed when nothing's streaming, list
   view gets a resizable "Streaming" column (in the Columns menu like any
-  other optional column), the detail drawer gets a "Where to watch (PL)"
+  other optional column), the detail drawer gets a "Where to watch"
   section. Every provider icon on a given title links to the *same* URL —
   TMDB's API has no per-provider deep link, only one link per
   title/country. Removing an item is a press-again-to-confirm button in the
@@ -412,6 +414,39 @@ since the Supabase migration:
   entry) with its own localStorage key (`movieShelf.demoWatchlist`). Add is
   still fully inert in demo either way (no session, no live TMDB calls) —
   same reasoning as Add-movie.
+
+---
+
+### Owned copies on the watchlist (2026-11-04)
+
+A watchlist title you also have in the personal collection counts as
+available. `buildOwnedLookup()` in app.js (next to `allWatchlist()`) builds
+IMDb-ID and `mediaType:tmdbId` maps over `state.allMovies` and returns
+`item -> collection movie | null`; it's rebuilt on every watchlist render,
+filter pass and drawer open (cheap — ~560 rows), so there's **no stored
+flag and nothing to keep in sync**: adding/deleting a copy is reflected on
+the next render. Never matches on a missing id, never across movie/TV (TMDB
+namespaces are separate). Where it shows:
+- Grid overlay + list "Where to watch" cell: `watchlistAvailabilityHtml()`
+  puts an `.owned-tag` ("Owned · Blu-ray, DVD", via `ownedFormatsList()`)
+  ahead of the streaming icons; when owned and not streaming it replaces
+  the "Not streaming in Poland" note.
+- Poster greyscale (`.poster-no-streaming`, name kept) now means *neither*
+  streaming nor owned.
+- Drawer: section is "Where to watch" with an `.owned-line` ("On your shelf
+  — …") above the streaming pills; the attribution line now carries the
+  "Streaming in Poland" scope.
+- Filter: the watchlist's `availability` filter (`#filter-availability`,
+  `.filter-group-availability`, values all/streaming/owned/neither) replaced
+  `streamingAvailable` (yes/no). Same grid cell. On desktop "Neither" wraps
+  to a second line in column 1 — fine, Decade wraps too.
+- Add-to-watchlist preview: `ownedForWatchlistAdd` shows an informational
+  "You already own this" notice; it does not disable the button.
+- Deliberately not done (user chose "easy does it", 2026-11-04): no poster
+  corner badge for owned titles, the shelf line isn't a link to the
+  collection entry, and the collection side doesn't show "on your
+  watchlist". Live data at build time: 56 of 817 watchlist titles owned, 6
+  of them not streaming.
 
 ---
 
@@ -862,7 +897,7 @@ which is still plain `<script>` tags with zero bundling.
   exercised too, via `bootRealApp.js`'s fake `window.supabaseClient`
   (`.auth.getSession`/`.onAuthStateChange`, `.from(table).select().order()`)
   — no real network or Supabase project involved either way.
-- **Coverage**: filter panel open/close (button, outside-click, Escape),
+- **Coverage**: owned copies on the watchlist (`watchlistOwned.test.js` — matching, tag, greyscale, Available filter, drawer, list column, add-preview note), filter panel open/close (button, outside-click, Escape),
   which filter groups show per tab (this is what would have caught the
   Decade-deleted-instead-of-moved mistake, see §8 and
   `filterPanel.test.js`'s regression test), Personal collection filtering

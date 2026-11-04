@@ -309,7 +309,7 @@ img { max-width: 100%; }
 
 .filter-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
-.filter-group-watched, .filter-group-streaming-available { grid-column: 1; grid-row: 2; }
+.filter-group-watched, .filter-group-availability { grid-column: 1; grid-row: 2; }
 .filter-group-decade { grid-column: 2; grid-row: 2; }
 .filter-group-format { grid-column: 3; grid-row: 2; }
 .filter-group-copies { grid-column: 4; grid-row: 2; }
@@ -451,6 +451,29 @@ main#content { padding: 20px; }
 .streaming-icon { width: 20px; height: 20px; border-radius: 4px; overflow: hidden; background: #20232b; flex-shrink: 0; }
 .streaming-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .streaming-empty { font-size: 11px; color: var(--text-faint); }
+
+/* Watchlist title you already own a copy of (matched against the personal
+   collection) — sits ahead of the streaming icons in the grid overlay and
+   the list's "Where to watch" cell. Same 20px height as .streaming-icon. */
+.owned-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.owned-tag > span { overflow: hidden; text-overflow: ellipsis; }
+.owned-tag .disc-icon { color: var(--accent); flex-shrink: 0; }
+.row-streaming .owned-tag { height: 18px; }
 
 .card-scores {
   display: flex;
@@ -827,6 +850,9 @@ main#content { padding: 20px; }
 .streaming-link:hover { border-color: var(--text-faint); color: var(--text); }
 .streaming-link img { width: 18px; height: 18px; border-radius: 4px; display: block; }
 .streaming-attribution { font-size: 11px; color: var(--text-faint); margin: 6px 0 0; }
+.detail-section .owned-line { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-dim); margin: 0 0 8px; }
+.owned-line strong { color: var(--text); font-weight: 600; }
+.owned-line .disc-icon { color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
 
 .cast-grid { display: flex; flex-wrap: wrap; gap: 10px 20px; }
 .cast-item { font-size: 13px; }
@@ -1039,7 +1065,7 @@ main#content { padding: 20px; }
   .filter-panel-inner { grid-template-columns: 1fr; }
   .filter-group-watched, .filter-group-format, .filter-group-decade,
   .filter-group-copies, .filter-group-genre, .filter-group-country,
-  .filter-group-type, .filter-group-streaming-available, .filter-group-streaming-service {
+  .filter-group-type, .filter-group-availability, .filter-group-streaming-service {
     grid-column: 1;
     grid-row: auto;
   }
