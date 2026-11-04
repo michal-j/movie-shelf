@@ -508,6 +508,38 @@ before import: a transposed-digit `imdb_id` typo, and 25 rows where
 the ground truth** — if `tmdb_id` and `imdb_id` disagree, re-derive
 `tmdb_id` from `imdb_id` via TMDB's `/find` endpoint, never the reverse.
 
+A third import on 2026-11-04 added **221 titles (181 movies + 40 TV)** from
+the user's own watchlists on Disney+, SkyShowtime, HBO Max and Prime Video
+(the user saved each service's watchlist JSON locally from the browser's
+network tab into `streaming_export/` — since deleted, untracked, don't
+expect it). Brings the table to **817 rows**. No streaming service has a
+public watchlist API and Apple TV has no export at all, so this was a
+one-time import, not a sync; nothing in the app or repo changed.
+What's worth knowing if it's ever repeated:
+- The exports carry titles (Polish for SkyShowtime/Prime, sometimes with
+  a "Sezon 1" suffix or a wrong year) but **no IMDb IDs**, so each title was
+  matched through TMDB search (title + year ±1, movie vs TV from the
+  service's own type field) and then checked **visually** against posters
+  in a throwaway grid page. The user supplied the correct IMDb ID for every
+  title the matcher couldn't settle — `imdb_id` stays the ground truth.
+- Export quirks: Disney+ is paginated 48 per file (`data.set.items`,
+  `pagination.totalCount` tells you the total); SkyShowtime lazy-loads tile
+  details, so `rails[].tiles` can list more IDs than `tiles[]` actually
+  contains; HBO Max is JSON:API (`included` → the "My List" collection →
+  `collectionItem` → `show`); Prime's pages are 40 entities each and the
+  **first 20 are not in any download** (they're in the page HTML), so
+  they were read from a screenshot. Always compare the number of items
+  captured against the count the service itself shows.
+- Method that worked: run the import **in the browser pane with the user's
+  own signed-in session** (call `/api/movie-lookup` and `/api/watch-providers`
+  per title, insert with the same column mapping as `confirmAddToWatchlist`,
+  skip anything already present by `tmdb_id`+`media_type` or `imdb_id`).
+  The ~220 full records never pass through the model's context, unlike SQL
+  batches (see §8). Test one row first and verify it in the DB.
+- Afterwards: 218/221 have Polish streaming data; the 3 without (*Escape
+  to Maldives / Papua New Guinea / Tahiti and Her Islands*) simply have no
+  PL entry in TMDB/JustWatch's data — not an import bug.
+
 ---
 
 ## 6. Known deferred work / backlog (explicitly "later, not now")
@@ -613,6 +645,12 @@ Still deferred, in roughly the order the user raised them:
 
 ## 8. Things learned the hard way (read before repeating them)
 
+- **After applying user-supplied ID overrides in an import, confirm every
+  one actually landed.** Overrides were keyed on the source service's title
+  string, and Prime's own typo ("Rózowa pantera") meant one override
+  silently missed and the wrong film (the 2006 remake) stayed in the list
+  until the final check. Verify by looking the supplied IMDb IDs up in the
+  result set, not by trusting that the key matched.
 - **Supabase bulk SQL via the MCP `execute_sql` tool**: batch generated SQL
   to roughly 12–20 rows / under ~30KB per call when rows contain long text
   fields — both the Read tool (25000-token cap) and Bash (~85KB output cap)

@@ -9,6 +9,17 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04]
+
+### Added
+
+- **One-time watchlist import from streaming services (data only, no code
+  change).** 221 titles (181 movies, 40 TV) from the user's Disney+,
+  SkyShowtime, HBO Max and Prime Video watchlists were matched via TMDB,
+  verified against posters, and inserted with full TMDB/OMDb metadata and
+  Polish streaming availability. The watchlist now holds 817 rows. See
+  `HANDOFF.md` §5 for the export formats and the import method.
+
 ## [2026-10-08]
 
 ### Fixed
