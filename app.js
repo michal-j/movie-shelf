@@ -657,6 +657,81 @@
   function render() {
     if (state.activeView === "watchlist") renderWatchlistView();
     else renderCollectionView();
+    applyAddedHighlight(false);
+  }
+
+  // ---------- "Just added" reveal ----------
+  // After an add succeeds, scroll the new title into view and highlight it
+  // for a few seconds. The highlight lives in module state (not only on the
+  // DOM node) because render() rebuilds the whole grid/list, and background
+  // streaming/ratings refreshes re-render within that window — applyAddedHighlight()
+  // re-applies the class on every render so it isn't silently lost. It is
+  // class-driven, never :hover-driven, so moving the mouse can't clear it.
+  const ADDED_HIGHLIGHT_MS = 4000;
+  let addedHighlightId = null;
+  let addedHighlightTimer = null;
+
+  function applyAddedHighlight(scroll) {
+    document.querySelectorAll(".just-added").forEach((n) => {
+      if (n.dataset.id !== addedHighlightId) n.classList.remove("just-added");
+    });
+    if (addedHighlightId === null) return;
+    const node = Array.from(document.querySelectorAll("[data-id]")).find(
+      (n) => n.dataset.id === addedHighlightId && !n.closest("[hidden]")
+    );
+    if (!node) return;
+    node.classList.add("just-added");
+    if (scroll && typeof node.scrollIntoView === "function") {
+      // Smooth-scrolling across hundreds of titles takes seconds and eats
+      // most of the highlight window, so only animate short distances.
+      const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const rect = node.getBoundingClientRect();
+      const distance = Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2);
+      const smooth = !reduceMotion && distance <= window.innerHeight * 1.5;
+      node.scrollIntoView({ block: "center", inline: "nearest", behavior: smooth ? "smooth" : "auto" });
+    }
+  }
+
+  // Returns true if the title is in the currently rendered (filtered) view
+  // and so could be revealed; false if the active filters/search hide it.
+  function revealAddedItem(id) {
+    const visibleItems = state.activeView === "watchlist" ? state.watchlist : state.movies;
+    if (!visibleItems.some((m) => m.id === id)) return false;
+    clearTimeout(addedHighlightTimer);
+    addedHighlightId = id;
+    applyAddedHighlight(true);
+    addedHighlightTimer = setTimeout(() => {
+      addedHighlightId = null;
+      applyAddedHighlight(false);
+    }, ADDED_HIGHLIGHT_MS);
+    return true;
+  }
+
+  // Call right after render(). If the active search/filters hide the new
+  // title, the toast says which one and offers "Show", which clears them
+  // (for the current tab only) and then reveals the title as usual.
+  function revealAddedAndToast(id, message) {
+    if (revealAddedItem(id)) {
+      showToast(message);
+      return;
+    }
+    const hasSearch = state.search.trim() !== "";
+    const hasFilters = (state.activeView === "watchlist" ? watchlistFilterCount() : collectionFilterCount()) > 0;
+    const reason = hasSearch && hasFilters ? "your search and filters" : hasSearch ? "your search" : "your filters";
+    showToast(`${message} — hidden by ${reason}`, {
+      label: "Show",
+      onClick: () => {
+        clearSearchAndFiltersForActiveView();
+        revealAddedItem(id);
+      },
+    });
+  }
+
+  function clearSearchAndFiltersForActiveView() {
+    state.search = "";
+    el("search-input").value = "";
+    if (state.activeView === "watchlist") clearWatchlistFilters();
+    else clearFilters();
   }
 
   function renderCollectionView() {
@@ -694,23 +769,31 @@
     else renderWatchlistList(filtered);
   }
 
-  function updateFilterBadge() {
-    const count =
+  function collectionFilterCount() {
+    return (
       (state.filters.watched !== "all" ? 1 : 0) +
       state.filters.formats.size +
       state.filters.genres.size +
       state.filters.countries.size +
       state.filters.decades.size +
       state.filters.types.size +
-      (state.filters.multiCopy ? 1 : 0);
+      (state.filters.multiCopy ? 1 : 0)
+    );
+  }
+
+  function watchlistFilterCount() {
+    const f = state.watchlistFilters;
+    return (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.types.size + f.streamingServices.size;
+  }
+
+  function updateFilterBadge() {
+    const count = collectionFilterCount();
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
   }
 
   function updateWatchlistFilterBadge() {
-    const f = state.watchlistFilters;
-    const count =
-      (f.streamingAvailable !== "all" ? 1 : 0) + f.genres.size + f.countries.size + f.decades.size + f.types.size + f.streamingServices.size;
+    const count = watchlistFilterCount();
     filterCountBadge.hidden = count === 0;
     filterCountBadge.textContent = count;
   }
@@ -808,7 +891,9 @@
   }
   function bindCardOpen(card, onOpen) {
     card.addEventListener("click", () => {
-      if (!TOUCH_DEVICE || card.classList.contains("preview-active")) {
+      // A just-added card already shows its details, so on touch it opens on
+      // the first tap like a previewed one, instead of a tap that seems to do nothing.
+      if (!TOUCH_DEVICE || card.classList.contains("preview-active") || card.classList.contains("just-added")) {
         onOpen();
         return;
       }
@@ -827,6 +912,7 @@
     movies.forEach((movie) => {
       const card = document.createElement("article");
       card.className = "movie-card" + (isWatched(movie.id) ? " is-watched" : "");
+      card.dataset.id = movie.id;
       card.tabIndex = 0;
 
       card.appendChild(posterNode(movie, "poster"));
@@ -882,6 +968,7 @@
       const hasStreaming = (movie.streamingProviders || []).length > 0;
       const card = document.createElement("article");
       card.className = "movie-card";
+      card.dataset.id = movie.id;
       card.tabIndex = 0;
 
       const poster = posterNode(movie, "poster");
@@ -984,6 +1071,7 @@
     movies.forEach((movie) => {
       const row = document.createElement("div");
       row.className = "movie-row";
+      row.dataset.id = movie.id;
       row.tabIndex = 0;
 
       const posterWrap = document.createElement("div");
@@ -1082,6 +1170,7 @@
       const hasStreaming = (movie.streamingProviders || []).length > 0;
       const row = document.createElement("div");
       row.className = "movie-row";
+      row.dataset.id = movie.id;
       row.tabIndex = 0;
 
       const posterWrap = document.createElement("div");
@@ -1684,10 +1773,10 @@
       return;
     }
     state.allWatchlist.push(newItem);
-    showToast("Added to watchlist");
     closeEditModal();
     rebuildFilterChips();
     render();
+    revealAddedAndToast(newItem.id, "Added to watchlist");
 
     if (newItem.tmdbId) fetchAndStoreStreamingProviders(newItem.id, newItem.tmdbId, newItem.mediaType);
   }
@@ -1929,10 +2018,12 @@
       }
       const idx = state.allMovies.findIndex((m) => m.id === duplicateOfExisting.id);
       state.allMovies[idx] = { ...state.allMovies[idx], copies: updatedCopies };
-      showToast(`Added ${format} copy of "${duplicateOfExisting.title}"`);
+      // closeEditModal() resets duplicateOfExisting, so read it first.
+      const { id: copiedId, title: copiedTitle } = duplicateOfExisting;
       closeEditModal();
       rebuildFilterChips();
       render();
+      revealAddedAndToast(copiedId, `Added ${format} copy of "${copiedTitle}"`);
       return;
     }
 
@@ -1996,10 +2087,10 @@
       return;
     }
     state.allMovies.push(newMovie);
-    showToast("Movie added");
     closeEditModal();
     rebuildFilterChips();
     render();
+    revealAddedAndToast(newMovie.id, "Movie added");
   });
 
   function splitCsv(value) {
@@ -2194,12 +2285,30 @@
 
   // ---------- Toast ----------
   let toastTimer = null;
-  function showToast(msg) {
+  // `action` ({ label, onClick }) adds a button to the toast; such toasts
+  // stay up longer so there's time to reach the button.
+  function showToast(msg, action = null) {
     const toast = el("toast");
-    toast.textContent = msg;
+    toast.textContent = "";
+    const text = document.createElement("span");
+    text.className = "toast-text";
+    text.textContent = msg;
+    toast.appendChild(text);
+    if (action) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toast-action";
+      btn.textContent = action.label;
+      btn.addEventListener("click", () => {
+        clearTimeout(toastTimer);
+        toast.hidden = true;
+        action.onClick();
+      });
+      toast.appendChild(btn);
+    }
     toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (toast.hidden = true), 2200);
+    toastTimer = setTimeout(() => (toast.hidden = true), action ? 6000 : 2200);
   }
 
   // ---------- Icons ----------

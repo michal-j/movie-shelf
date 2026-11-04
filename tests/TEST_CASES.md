@@ -632,3 +632,53 @@ watchlist", type "The Blue Planet", pick the (TV) result, confirm.
 ### HTML entities in OMDb text are decoded
 **Steps:** Decode `Dan O&apos;Bannon`, `Q&amp;A &quot;x&quot;`, `&amp;apos;`.
 **Expected:** `Dan O'Bannon`, `Q&A "x"`, `&apos;` (no double decoding); plain text and null unchanged.
+
+## Reveal and highlight after adding (`addedHighlight.test.js`, real app)
+
+### Highlights and scrolls to the new grid card in the collection
+**Steps:** One owned movie; add "Brand New Film" through the Add flow (grid view).
+**Expected:** Its card has the `just-added` class, `scrollIntoView` was called on it once, toast reads "Movie added".
+
+### Highlights the new row in list view
+**Steps:** Switch to list view, then add a title.
+**Expected:** The new row (not a card) is highlighted.
+
+### Highlights the new watchlist item
+**Steps:** Open the Watchlist tab and add a title.
+**Expected:** The new card is highlighted; toast reads "Added to watchlist".
+
+### Highlights the existing title when a copy is added to it
+**Steps:** Add a title whose IMDb id is already on the shelf.
+**Expected:** The existing movie's card (not a new one) is highlighted; toast mentions "copy of".
+
+### Keeps the highlight through a re-render and mouse movement
+**Steps:** After an add, hover in/out of another card, then type into search so the grid re-renders with the new title still matching.
+**Expected:** Still exactly one highlighted card; no second scroll.
+
+### Clears the highlight after a few seconds
+**Steps:** After an add, advance 3 s, then 1.5 s more.
+**Expected:** Highlighted at 3 s, gone by 4.5 s.
+
+### Does not highlight a title hidden by search, and says so in the toast
+**Steps:** Search "existing", then add a title that doesn't match.
+**Expected:** Nothing highlighted, no scrolling; toast reads "Movie added — hidden by your search" with a "Show" button.
+
+### Names filters, or search and filters, as the reason
+**Steps:** Turn on the Drama genre filter and add a non-Drama title; then also search "existing" and add the same title again (becomes an extra copy).
+**Expected:** First toast "Movie added — hidden by your filters"; second "Added DVD copy of "Brand New Film" — hidden by your search and filters".
+
+### Show clears search and filters, then reveals and highlights the title
+**Steps:** Drama filter on, search "existing", add a non-matching title, click "Show" in the toast.
+**Expected:** Search box empty, Drama chip off, filter badge hidden, toast gone, both titles visible, new card highlighted and scrolled to once.
+
+### Show only clears the watchlist's own filters when adding to the watchlist
+**Steps:** Drama filter on in the collection; switch to Watchlist, Drama filter on there too; add a non-Drama title; click "Show".
+**Expected:** Toast "Added to watchlist — hidden by your filters"; after Show the new item is highlighted; back on the collection tab the filter badge still reads 1.
+
+### On touch, a highlighted card opens on the first tap
+**Steps:** Boot as a touch device, add a title, tap its highlighted card; then tap another card.
+**Expected:** The highlighted card opens the detail drawer on the first tap (its details are already showing); the other card only previews on its first tap, as before.
+
+### A plain toast has no action button
+**Steps:** Add a title that matches the current (empty) filters.
+**Expected:** Toast "Movie added" with no button.
