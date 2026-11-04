@@ -540,6 +540,33 @@ What's worth knowing if it's ever repeated:
   to Maldives / Papua New Guinea / Tahiti and Her Islands*) simply have no
   PL entry in TMDB/JustWatch's data — not an import bug.
 
+### Ratings refresh (added 2026-11-04)
+
+IMDb rating / votes / Metascore are copied from OMDb once at add/import
+time and drift afterwards. `refreshStaleRatings()` in `app.js` (called from
+`init()` next to `refreshStaleStreamingProviders()`, real app only) re-reads
+them through `api/ratings.js` (one OMDb call per title) for both tables.
+- State: `ratings_fetched_at timestamptz` on `movies` and `watchlist`
+  (null = never refreshed; also in both SELECT/column maps in `app.js`).
+- Policy: 30 titles per load, 3 concurrent; never-fetched first, then
+  oldest, ties newest-release-first. Stale after 7 days (this/last year),
+  30 days (≤3 years old), 90 days (older / no year).
+- Safety: a null from OMDb never overwrites a stored value; `found:false`
+  (OMDb has no record) still stamps `ratings_fetched_at` so it doesn't
+  hog a slot; transient errors (502) don't stamp, so they're retried; a
+  429 (OMDb's 1000/day limit, shared with the Add flow) stops the run.
+- First rollout: all ~1,400 rows start never-fetched, so it drains at ~30
+  per app load (about 2 months of daily use to cover everything once).
+- Not a server-side schedule: nothing runs while the app is closed. A
+  Vercel Cron variant would need the Supabase service-role key (bypasses
+  RLS) in Vercel env — deliberately not done.
+- `api/_omdb.js` holds `decodeEntities` — OMDb returns `O&apos;Bannon`-style
+  entities, now decoded by `movie-lookup.js`.
+- **Data gotcha found while building it:** the 2026-09-15 watchlist import
+  (104 titles) never stored Metascore (IMDb CSV exports have none); 87
+  were backfilled from OMDb on 2026-11-04. The "~47 no Metascore,
+  legitimately absent" note above is about the collection only.
+
 ---
 
 ## 6. Known deferred work / backlog (explicitly "later, not now")

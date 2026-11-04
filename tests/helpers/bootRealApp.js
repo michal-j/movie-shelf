@@ -19,8 +19,10 @@ function bodyMarkup() {
 // calls `.from(table)` fresh each time, so a counter scoped to a single
 // fakeQuery() call would just see index 0 again on the retry.
 // `inserted` collects every row passed to `.insert()` for that table, so a
-// test can assert on what the add flow actually wrote.
-function fakeQuery(resultOrSequence, counter, inserted) {
+// test can assert on what the add flow actually wrote. `updated` does the
+// same for `.update(payload).eq(column, value)` calls (the background
+// refreshes), as { payload, column, value }.
+function fakeQuery(resultOrSequence, counter, inserted, updated) {
   return {
     select: () => ({
       order: async () => {
@@ -28,7 +30,12 @@ function fakeQuery(resultOrSequence, counter, inserted) {
         return typeof resultOrSequence === "function" ? resultOrSequence(idx) : resultOrSequence;
       },
     }),
-    update: () => ({ eq: async () => ({ error: null }) }),
+    update: (payload) => ({
+      eq: async (column, value) => {
+        updated.push({ payload, column, value });
+        return { error: null };
+      },
+    }),
     insert: async (row) => {
       inserted.push(row);
       return { error: null };
@@ -85,19 +92,22 @@ export async function bootRealApp({
   const onAuthStateChange = vi.fn();
   const callCounters = { movies: { count: 0 }, watchlist: { count: 0 } };
   const inserted = { movies: [], watchlist: [] };
+  const updated = { movies: [], watchlist: [] };
   const from = vi.fn((table) => {
     if (table === "movies") {
       return fakeQuery(
         typeof movies === "function" ? movies : { data: movies, error: null },
         callCounters.movies,
-        inserted.movies
+        inserted.movies,
+        updated.movies
       );
     }
     if (table === "watchlist") {
       return fakeQuery(
         typeof watchlist === "function" ? watchlist : { data: watchlist, error: null },
         callCounters.watchlist,
-        inserted.watchlist
+        inserted.watchlist,
+        updated.watchlist
       );
     }
     throw new Error(`Unexpected table in test: ${table}`);
@@ -129,5 +139,5 @@ export async function bootRealApp({
     });
   }
 
-  return { document, getSession, inserted };
+  return { document, getSession, inserted, updated };
 }
