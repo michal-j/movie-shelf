@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04] — reveal added titles
+
 ### Added
 
 - **Reveal and highlight after adding.** After a successful add (new
