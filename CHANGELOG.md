@@ -9,6 +9,8 @@ than by individual session.
 
 ## [Unreleased]
 
+## [2026-11-04] — ratings refresh
+
 ### Added
 
 - **Background ratings refresh.** IMDb rating, vote count and Metascore are
