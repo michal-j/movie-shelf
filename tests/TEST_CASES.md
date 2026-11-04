@@ -717,9 +717,9 @@ collection and the watchlist:
 **Steps:** Look at Owned Via Tmdb, TV Id Clash, Unavailable.
 **Expected:** Only Owned Via Tmdb has the Owned tag.
 
-### filters by availability: streaming, owned, neither
-**Steps:** Under Available, click Streaming, then Owned, then Neither, then All.
-**Expected:** Streaming → Owned And Streaming, Streaming Only. Owned → Owned And Streaming, Owned Not Streaming, Owned Via Tmdb. Neither → TV Id Clash, Unavailable. All → all 6.
+### filters by availability: streaming, owned, both, neither
+**Steps:** Under Available, click Streaming, then Owned, then Both, then Neither, then All.
+**Expected:** Streaming → Owned And Streaming, Streaming Only. Owned → Owned And Streaming, Owned Not Streaming, Owned Via Tmdb. Both → Owned And Streaming. Neither → TV Id Clash, Unavailable. All → all 6.
 
 ### shows 'On your shelf' in the drawer's Where to watch section
 **Steps:** Open Owned Not Streaming's drawer; close it; open Streaming Only's.

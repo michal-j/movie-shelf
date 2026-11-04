@@ -87,12 +87,15 @@ describe("Watchlist: titles you already own", () => {
     expect(card("Unavailable").querySelector(".owned-tag")).toBeNull();
   });
 
-  it("filters by availability: streaming, owned, neither", () => {
+  it("filters by availability: streaming, owned, both, neither", () => {
     clickChip("filter-availability", "streaming");
     expect(cardTitles()).toEqual(["Owned And Streaming", "Streaming Only"]);
 
     clickChip("filter-availability", "owned");
     expect(cardTitles()).toEqual(["Owned And Streaming", "Owned Not Streaming", "Owned Via Tmdb"]);
+
+    clickChip("filter-availability", "both");
+    expect(cardTitles()).toEqual(["Owned And Streaming"]);
 
     clickChip("filter-availability", "neither");
     expect(cardTitles()).toEqual(["TV Id Clash", "Unavailable"]);
