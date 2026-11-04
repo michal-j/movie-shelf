@@ -93,6 +93,18 @@ version — one entry per automated test (name, steps, expected result),
 for skimming what's covered or walking through a case by hand without
 reading test code.
 
+## Linting
+
+```bash
+npm run lint
+```
+
+ESLint 9 (`eslint.config.mjs`): the recommended rules plus `eqeqeq`,
+`no-var` and `prefer-const`, with separate environments for the browser
+scripts (`app.js`, `login.js`, `supabaseClient.js` — plain scripts with
+browser globals), the CommonJS `/api` functions (Node), and the tests.
+Run it before committing, alongside `npm test`.
+
 ## Project layout
 
 ```

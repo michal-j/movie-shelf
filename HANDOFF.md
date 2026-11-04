@@ -828,6 +828,16 @@ Still deferred, in roughly the order the user raised them:
 
 ## 9. Automated tests (added 2026-09-20)
 
+**Linting (added 2026-11-04):** `npm run lint` runs ESLint 9 with
+`eslint.config.mjs`. Browser files are linted as plain scripts
+(`sourceType: "script"`, browser globals + the `supabase` CDN global), so
+an accidental `import`/`module.exports` in `app.js` is flagged; `/api/*`
+is linted as CommonJS on Node. The config is `.mjs` for the same reason
+as `vitest.config.mjs` — see §7, never add `"type": "module"` to the root
+`package.json`. Run lint and tests before every commit. If a new browser
+script is added, add it to the browser `files` list in the config, or
+it'll be linted with no browser globals.
+
 There was no test suite before this. `package.json` + `vitest.config.mjs`
 exist solely for this — they don't add a build step to the app itself,
 which is still plain `<script>` tags with zero bundling.

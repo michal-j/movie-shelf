@@ -9,6 +9,14 @@ than by individual session.
 
 ## [Unreleased]
 
+### Added
+
+- **ESLint.** `npm run lint` (ESLint 9, flat config in `eslint.config.mjs`)
+  with per-environment settings for the browser scripts, the CommonJS
+  `/api` functions and the tests. The first run found two small issues,
+  both fixed: a `let` that should be `const` in the detail-drawer close
+  code, and an unused import in a test.
+
 ## [2026-11-04] — reveal added titles
 
 ### Added

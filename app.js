@@ -1329,7 +1329,6 @@
     // zombie listener would then catch the *next* open's own slide-in
     // transitionend (same target, same "transform" property) and
     // force-hide the drawer right after it finished opening.
-    let timer;
     const onTransitionEnd = (e) => {
       if (e.target === panel && e.propertyName === "transform") finish();
     };
@@ -1340,7 +1339,9 @@
       detailModal.hidden = true;
     };
     panel.addEventListener("transitionend", onTransitionEnd);
-    timer = setTimeout(finish, 350); // fallback in case transitionend doesn't fire
+    // Fallback in case transitionend doesn't fire. finish() and the cancel
+    // closure below only run asynchronously, after this is assigned.
+    const timer = setTimeout(finish, 350);
     cancelPendingDetailClose = () => {
       clearTimeout(timer);
       panel.removeEventListener("transitionend", onTransitionEnd);
